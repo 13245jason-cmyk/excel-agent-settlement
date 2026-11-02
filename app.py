@@ -42,7 +42,7 @@ def parse_uploaded_report(file_bytes: bytes) -> dict:
 
 st.set_page_config(page_title="Excel 代理結算系統", page_icon="🧾", layout="wide")
 st.title("🧾 Excel 代理結算系統")
-st.caption("上傳報表後，系統會自動辨識「總結」工作表並以 Decimal 精準計算。")
+st.caption("上傳報表後，系統會從「下線代理」與「直屬會員」分頁加總，並以 Decimal 精準計算。")
 
 settings = get_settings()
 with st.sidebar:
