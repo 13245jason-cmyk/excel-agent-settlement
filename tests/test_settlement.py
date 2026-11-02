@@ -45,3 +45,16 @@ def test_missing_required_column_is_explicit_error():
     else:
         raise AssertionError("expected an explicit parse error")
 
+
+def test_empty_report_with_explicit_zero_total_is_valid():
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "總結"
+    ws.append(["遊戲分類", "輸贏金額", "有效投注"])
+    ws.append(["總計", 0, 0])
+    output = BytesIO()
+    wb.save(output)
+    report = parse_report(BytesIO(output.getvalue()))
+    assert report["empty_report"] is True
+    assert report["total_win_loss"] == Decimal("0")
+

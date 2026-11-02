@@ -67,11 +67,17 @@ def parse_report(source: str | Path | BinaryIO) -> dict:
 
     totals = {game: {"valid_bet": Decimal("0"), "win_loss": Decimal("0")} for game in GAMES}
     found_games = set()
+    total_row_seen = False
+    total_valid_bet = None
+    total_win_loss = None
     for row in ws.iter_rows(min_row=header_row + 1):
         game_raw = row[columns["game"] - 1].value
         marker = _norm(game_raw)
         if marker in {"總計", "合計", "小計", "玩家合計", "代理合計"} or any(x in marker for x in ("小計", "合計")):
             if marker in {"總計", "合計"}:
+                total_row_seen = True
+                total_valid_bet = _decimal(row[columns["valid_bet"] - 1].value, "有效投注")
+                total_win_loss = _decimal(row[columns["win_loss"] - 1].value, "輸贏金額")
                 break
             continue
         game = _game(game_raw)
@@ -83,9 +89,10 @@ def parse_report(source: str | Path | BinaryIO) -> dict:
         totals[game]["win_loss"] += win_loss
         found_games.add(game)
     missing = [game for game in GAMES if game not in found_games]
-    if missing:
+    empty_report = total_row_seen and not found_games and total_valid_bet == 0 and total_win_loss == 0
+    if missing and not empty_report:
         raise SettlementError(f"「總結」工作表缺少遊戲類型資料：{', '.join(missing)}。")
-    return {"sheet_name": ws.title, "games": totals, "total_win_loss": sum((v["win_loss"] for v in totals.values()), Decimal("0"))}
+    return {"sheet_name": ws.title, "games": totals, "total_win_loss": total_win_loss if empty_report else sum((v["win_loss"] for v in totals.values()), Decimal("0")), "empty_report": empty_report}
 
 
 def calculate_settlement(report: dict, rates: dict[str, Decimal], ratio: Decimal) -> dict:
