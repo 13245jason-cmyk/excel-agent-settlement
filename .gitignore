@@ -1,0 +1,8 @@
+__pycache__/
+.pytest_cache/
+.venv/
+data/*.json
+data/*.db
+.streamlit/secrets.toml
+test_data/*.xlsx
+
