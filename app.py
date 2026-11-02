@@ -82,6 +82,8 @@ if uploaded:
     st.success(f"已辨識工作表：{report['sheet_name']}；資料期間/代理資訊依原始報表保留。")
     if report.get("empty_report"):
         st.info("此報表的「總計」列為 0，且沒有遊戲明細；系統依原始總計顯示本期無交易資料。")
+    elif report.get("missing_games"):
+        st.info(f"本期無資料的遊戲類型已按 0 計算：{', '.join(report['missing_games'])}。")
     rows = []
     for game, item in result["games"].items():
         rows.append({"遊戲類型": game, "有效投注": dstr(item["valid_bet"]), "佣金倍率": str(item["rate"]), "佣金": dstr(item["commission"])})

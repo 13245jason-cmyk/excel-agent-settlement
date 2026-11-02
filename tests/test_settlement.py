@@ -58,3 +58,18 @@ def test_empty_report_with_explicit_zero_total_is_valid():
     assert report["empty_report"] is True
     assert report["total_win_loss"] == Decimal("0")
 
+
+def test_missing_game_categories_are_zero():
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "總結"
+    ws.append(["遊戲分類", "輸贏金額", "有效投注"])
+    ws.append(["Slots", -10, 100])
+    ws.append(["總計", -10, 100])
+    output = BytesIO()
+    wb.save(output)
+    report = parse_report(BytesIO(output.getvalue()))
+    assert report["games"]["MiniGame"]["valid_bet"] == Decimal("0")
+    assert report["games"]["Casino1"]["win_loss"] == Decimal("0")
+    assert set(report["missing_games"]) == {"MiniGame", "Casino1", "Casino2"}
+

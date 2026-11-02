@@ -90,9 +90,7 @@ def parse_report(source: str | Path | BinaryIO) -> dict:
         found_games.add(game)
     missing = [game for game in GAMES if game not in found_games]
     empty_report = total_row_seen and not found_games and total_valid_bet == 0 and total_win_loss == 0
-    if missing and not empty_report:
-        raise SettlementError(f"「總結」工作表缺少遊戲類型資料：{', '.join(missing)}。")
-    return {"sheet_name": ws.title, "games": totals, "total_win_loss": total_win_loss if empty_report else sum((v["win_loss"] for v in totals.values()), Decimal("0")), "empty_report": empty_report}
+    return {"sheet_name": ws.title, "games": totals, "total_win_loss": total_win_loss if empty_report else sum((v["win_loss"] for v in totals.values()), Decimal("0")), "empty_report": empty_report, "missing_games": missing}
 
 
 def calculate_settlement(report: dict, rates: dict[str, Decimal], ratio: Decimal) -> dict:
