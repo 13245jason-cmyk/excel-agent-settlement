@@ -65,7 +65,7 @@ def parse_report(source: str | Path | BinaryIO) -> dict:
     if not header_row:
         raise SettlementError("「總結」工作表缺少必要欄位：遊戲分類、有效投注、輸贏金額。")
 
-    totals = {game: {"valid_bet": Decimal("0"), "win_loss": Decimal("0")} for game in GAMES}
+    totals = {}
     found_games = set()
     total_row_seen = False
     total_valid_bet = None
@@ -85,21 +85,23 @@ def parse_report(source: str | Path | BinaryIO) -> dict:
             continue
         valid = _decimal(row[columns["valid_bet"] - 1].value, "有效投注")
         win_loss = _decimal(row[columns["win_loss"] - 1].value, "輸贏金額")
+        totals.setdefault(game, {"valid_bet": Decimal("0"), "win_loss": Decimal("0")})
         totals[game]["valid_bet"] += valid
         totals[game]["win_loss"] += win_loss
         found_games.add(game)
-    missing = [game for game in GAMES if game not in found_games]
     empty_report = total_row_seen and not found_games and total_valid_bet == 0 and total_win_loss == 0
-    return {"sheet_name": ws.title, "games": totals, "total_win_loss": total_win_loss if empty_report else sum((v["win_loss"] for v in totals.values()), Decimal("0")), "empty_report": empty_report, "missing_games": missing}
+    return {"sheet_name": ws.title, "games": totals, "total_win_loss": total_win_loss if empty_report else sum((v["win_loss"] for v in totals.values()), Decimal("0")), "empty_report": empty_report}
 
 
 def calculate_settlement(report: dict, rates: dict[str, Decimal], ratio: Decimal) -> dict:
     games = {}
     total_commission = Decimal("0")
-    for game in GAMES:
+    for game, source in report["games"].items():
+        if game not in rates:
+            raise SettlementError(f"報表中的遊戲類型「{game}」沒有對應佣金倍率設定。")
         rate = rates[game]
-        commission = report["games"][game]["valid_bet"] * rate
-        games[game] = {**report["games"][game], "rate": rate, "commission": commission}
+        commission = source["valid_bet"] * rate
+        games[game] = {**source, "rate": rate, "commission": commission}
         total_commission += commission
     net = report["total_win_loss"] + total_commission
     return {"games": games, "total_win_loss": report["total_win_loss"], "total_commission": total_commission, "net_settlement": net, "settlement_ratio": ratio, "final_settlement": net * ratio}

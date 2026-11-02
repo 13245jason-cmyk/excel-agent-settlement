@@ -69,7 +69,8 @@ def test_missing_game_categories_are_zero():
     output = BytesIO()
     wb.save(output)
     report = parse_report(BytesIO(output.getvalue()))
-    assert report["games"]["MiniGame"]["valid_bet"] == Decimal("0")
-    assert report["games"]["Casino1"]["win_loss"] == Decimal("0")
-    assert set(report["missing_games"]) == {"MiniGame", "Casino1", "Casino2"}
+    assert set(report["games"]) == {"Slots"}
+    assert "MiniGame" not in report["games"]
+    assert "Casino1" not in report["games"]
+    assert "Casino2" not in report["games"]
 
