@@ -38,14 +38,11 @@ def _game(value: object) -> str | None:
     return aliases.get(key)
 
 
-def _find_summary_sheet(wb):
+def _find_sheet(wb, title: str):
     for ws in wb.worksheets:
-        if _norm(ws.title) == "總結":
+        if _norm(ws.title) == _norm(title):
             return ws
-    for ws in wb.worksheets:
-        if "總結" in ws.title:
-            return ws
-    raise SettlementError("找不到「總結」工作表。")
+    raise SettlementError(f"找不到「{title}」工作表。")
 
 
 def parse_report(source: str | Path | BinaryIO) -> dict:
@@ -53,44 +50,37 @@ def parse_report(source: str | Path | BinaryIO) -> dict:
         wb = load_workbook(source, data_only=True, read_only=True)
     except Exception as exc:
         raise SettlementError(f"無法讀取 Excel 檔案：{exc}")
-    ws = _find_summary_sheet(wb)
-    header_row = None
-    columns = {}
-    for row in ws.iter_rows():
-        found = {_norm(cell.value): cell.column for cell in row if cell.value is not None}
-        if "遊戲分類" in found and ("有效投注" in found or "有效投注額" in found) and "輸贏金額" in found:
-            header_row = row[0].row
-            columns = {"game": found["遊戲分類"], "valid_bet": found.get("有效投注", found.get("有效投注額")), "win_loss": found["輸贏金額"]}
-            break
-    if not header_row:
-        raise SettlementError("「總結」工作表缺少必要欄位：遊戲分類、有效投注、輸贏金額。")
-
     totals = {}
     found_games = set()
-    total_row_seen = False
-    total_valid_bet = None
-    total_win_loss = None
-    for row in ws.iter_rows(min_row=header_row + 1):
-        game_raw = row[columns["game"] - 1].value
-        marker = _norm(game_raw)
-        if marker in {"總計", "合計", "小計", "玩家合計", "代理合計"} or any(x in marker for x in ("小計", "合計")):
-            if marker in {"總計", "合計"}:
-                total_row_seen = True
-                total_valid_bet = _decimal(row[columns["valid_bet"] - 1].value, "有效投注")
-                total_win_loss = _decimal(row[columns["win_loss"] - 1].value, "輸贏金額")
+    source_sheets = []
+    for sheet_name in ("下線代理", "直屬會員"):
+        ws = _find_sheet(wb, sheet_name)
+        source_sheets.append(ws.title)
+        header_row = None
+        columns = {}
+        for row in ws.iter_rows():
+            found = {_norm(cell.value): cell.column for cell in row if cell.value is not None}
+            if "遊戲分類" in found and ("有效投注" in found or "有效投注額" in found) and "輸贏金額" in found:
+                header_row = row[0].row
+                columns = {"game": found["遊戲分類"], "valid_bet": found.get("有效投注", found.get("有效投注額")), "win_loss": found["輸贏金額"]}
                 break
-            continue
-        game = _game(game_raw)
-        if game is None:
-            continue
-        valid = _decimal(row[columns["valid_bet"] - 1].value, "有效投注")
-        win_loss = _decimal(row[columns["win_loss"] - 1].value, "輸贏金額")
-        totals.setdefault(game, {"valid_bet": Decimal("0"), "win_loss": Decimal("0")})
-        totals[game]["valid_bet"] += valid
-        totals[game]["win_loss"] += win_loss
-        found_games.add(game)
-    empty_report = total_row_seen and not found_games and total_valid_bet == 0 and total_win_loss == 0
-    return {"sheet_name": ws.title, "games": totals, "total_win_loss": total_win_loss if empty_report else sum((v["win_loss"] for v in totals.values()), Decimal("0")), "empty_report": empty_report}
+        if not header_row:
+            raise SettlementError(f"「{ws.title}」工作表缺少必要欄位：遊戲分類、有效投注、輸贏金額。")
+        for row in ws.iter_rows(min_row=header_row + 1):
+            game_raw = row[columns["game"] - 1].value
+            marker = _norm(game_raw)
+            if any(x in marker for x in ("小計", "合計", "總計")):
+                continue
+            game = _game(game_raw)
+            if game is None:
+                continue
+            valid = _decimal(row[columns["valid_bet"] - 1].value, "有效投注")
+            win_loss = _decimal(row[columns["win_loss"] - 1].value, "輸贏金額")
+            totals.setdefault(game, {"valid_bet": Decimal("0"), "win_loss": Decimal("0")})
+            totals[game]["valid_bet"] += valid
+            totals[game]["win_loss"] += win_loss
+            found_games.add(game)
+    return {"sheet_name": "、".join(source_sheets), "games": totals, "total_win_loss": sum((v["win_loss"] for v in totals.values()), Decimal("0")), "empty_report": not found_games}
 
 
 def calculate_settlement(report: dict, rates: dict[str, Decimal], ratio: Decimal) -> dict:

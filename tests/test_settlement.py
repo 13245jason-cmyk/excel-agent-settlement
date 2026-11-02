@@ -9,13 +9,14 @@ from settlement import DEFAULT_RATES, calculate_settlement, parse_report
 def make_report():
     wb = Workbook()
     ws = wb.active
-    ws.title = "總結"
+    ws.title = "下線代理"
     ws.append(["遊戲分類", "輸贏金額", "有效投注"])
     ws.append(["Slots", -10, 100])
     ws.append(["MiniGame", 20, 200])
-    ws.append(["LiveCasino1", -30, 300])
-    ws.append(["LiveCasino2", 40, 400])
-    ws.append(["總計", 20, 1000])
+    ws2 = wb.create_sheet("直屬會員")
+    ws2.append(["遊戲分類", "輸贏金額", "有效投注"])
+    ws2.append(["LiveCasino1", -30, 300])
+    ws2.append(["LiveCasino2", 40, 400])
     output = BytesIO()
     wb.save(output)
     return output.getvalue()
@@ -34,8 +35,10 @@ def test_parse_and_calculate_direction():
 def test_missing_required_column_is_explicit_error():
     wb = Workbook()
     ws = wb.active
-    ws.title = "總結"
+    ws.title = "下線代理"
     ws.append(["遊戲分類", "輸贏金額"])
+    ws2 = wb.create_sheet("直屬會員")
+    ws2.append(["遊戲分類", "輸贏金額"])
     output = BytesIO()
     wb.save(output)
     try:
@@ -49,9 +52,11 @@ def test_missing_required_column_is_explicit_error():
 def test_empty_report_with_explicit_zero_total_is_valid():
     wb = Workbook()
     ws = wb.active
-    ws.title = "總結"
+    ws.title = "下線代理"
     ws.append(["遊戲分類", "輸贏金額", "有效投注"])
     ws.append(["總計", 0, 0])
+    ws2 = wb.create_sheet("直屬會員")
+    ws2.append(["遊戲分類", "輸贏金額", "有效投注"])
     output = BytesIO()
     wb.save(output)
     report = parse_report(BytesIO(output.getvalue()))
@@ -59,13 +64,14 @@ def test_empty_report_with_explicit_zero_total_is_valid():
     assert report["total_win_loss"] == Decimal("0")
 
 
-def test_missing_game_categories_are_zero():
+def test_only_present_game_categories_are_used():
     wb = Workbook()
     ws = wb.active
-    ws.title = "總結"
+    ws.title = "下線代理"
     ws.append(["遊戲分類", "輸贏金額", "有效投注"])
     ws.append(["Slots", -10, 100])
-    ws.append(["總計", -10, 100])
+    ws2 = wb.create_sheet("直屬會員")
+    ws2.append(["遊戲分類", "輸贏金額", "有效投注"])
     output = BytesIO()
     wb.save(output)
     report = parse_report(BytesIO(output.getvalue()))
