@@ -1,0 +1,143 @@
+from __future__ import annotations
+
+import io
+from decimal import Decimal, InvalidOperation
+from pathlib import Path
+import hashlib
+import json
+
+from access import account_data_dir, require_login
+from authentication import ENVIRONMENTS
+
+import pandas as pd
+import streamlit as st
+
+from settlement import (
+    DEFAULT_RATES,
+    DEFAULT_SETTLEMENT_RATIO,
+    SettlementError,
+    calculate_settlement,
+    export_result_xlsx,
+    load_settings,
+    parse_report,
+    save_history,
+    save_settings,
+)
+
+BASE_DIR = Path(__file__).parent
+
+
+def dstr(value: Decimal) -> str:
+    return format(value, ",.2f")
+
+
+def parse_uploaded_report(file_bytes: bytes) -> dict:
+    """Session-only report cache: never share report bytes between logged-in accounts."""
+    digest = hashlib.sha256(file_bytes).hexdigest()
+    cached = st.session_state.get("parsed_upload")
+    if cached is None or cached["digest"] != digest:
+        cached = {"digest": digest, "report": parse_report(io.BytesIO(file_bytes))}
+        st.session_state.parsed_upload = cached
+    return cached["report"]
+
+
+def read_parameters(rate_inputs: dict, ratio_input: str):
+    rates = {game: Decimal(value.strip()) for game, value in rate_inputs.items()}
+    ratio = Decimal(ratio_input.strip())
+    if any(not v.is_finite() or v < 0 or v > 1 for v in [*rates.values(), ratio]):
+        raise ValueError("倍率與結算比例必須是 0 到 1 之間的有限數字。")
+    return rates, ratio
+
+
+def run_app(environment: str) -> None:
+    st.set_page_config(page_title="Excel 代理結算系統", page_icon="🧾", layout="wide")
+    st.title(f"🧾 Excel 代理結算系統｜{ENVIRONMENTS[environment]}")
+    if environment == "staging":
+        st.warning("🧪 內部測試環境：請使用測試報表，結果不可作為正式付款依據。")
+    account = require_login(environment)
+    data_dir = account_data_dir(BASE_DIR, environment, account)
+    settings_file = data_dir / "settings.json"
+    history_file = data_dir / "history.json"
+    st.caption("版本：source-sheets-v2｜上傳報表後，系統會從「下線代理」與「直屬會員」分頁加總，並以 Decimal 精準計算。")
+
+    try:
+        settings = load_settings(settings_file)
+    except SettlementError as exc:
+        st.error(str(exc))
+        st.stop()
+    with st.sidebar:
+        st.header("佣金倍率設定")
+        rate_inputs = {}
+        for game in DEFAULT_RATES:
+            rate_inputs[game] = st.text_input(
+                f"{game} 倍率", value=str(settings["rates"].get(game, DEFAULT_RATES[game])), key=f"rate_{game}"
+            )
+        st.header("結算比例設定")
+        ratio_input = st.text_input("結算比例", value=str(settings.get("settlement_ratio", DEFAULT_SETTLEMENT_RATIO)), key="ratio")
+        if st.button("儲存設定", use_container_width=True):
+            try:
+                parsed, parsed_ratio = read_parameters(rate_inputs, ratio_input)
+                save_settings(settings_file, parsed, parsed_ratio)
+                st.success("設定已儲存，下次載入會沿用。")
+            except (InvalidOperation, ValueError, OSError):
+                st.error("設定必須是 0 到 1 的有效數字，且儲存目錄必須可寫入。")
+
+    uploaded = st.file_uploader("報表上傳區（.xlsx）", type=["xlsx"])
+
+    if uploaded:
+        try:
+            report = parse_uploaded_report(uploaded.getvalue())
+            rates, ratio = read_parameters(rate_inputs, ratio_input)
+            result = calculate_settlement(report, rates, ratio)
+        except (SettlementError, InvalidOperation, ValueError) as exc:
+            st.error(str(exc))
+            st.stop()
+
+        st.success(f"已辨識工作表：{report['sheet_name']}；資料期間/代理資訊依原始報表保留。")
+        if report.get("empty_report"):
+            st.info("此報表的「總計」列為 0，且沒有遊戲明細；系統依原始總計顯示本期無交易資料。")
+        elif not report["games"]:
+            st.info("報表沒有可計算的遊戲明細，系統依總計列顯示結果。")
+        rows = []
+        for game, item in result["games"].items():
+            rows.append({"遊戲類型": game, "有效投注": dstr(item["valid_bet"]), "佣金倍率": str(item["rate"]), "佣金": dstr(item["commission"])})
+        st.subheader("各遊戲有效投注及佣金明細")
+        st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True)
+
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("總輸贏", dstr(result["total_win_loss"]))
+        c2.metric("總佣金", dstr(result["total_commission"]))
+        c3.metric("結算淨額", dstr(result["net_settlement"]))
+        c4.metric("最終結算", dstr(result["final_settlement"]))
+
+        final = result["final_settlement"]
+        if final < 0:
+            st.error(f"代理需交上線：{dstr(abs(final))}")
+        elif final > 0:
+            st.success(f"上線需給代理：{dstr(final)}")
+        else:
+            st.info("雙方無需付款")
+
+        output = export_result_xlsx(report, result)
+        st.download_button("⬇️ 一鍵下載 Excel 結算結果", output, file_name=f"{Path(uploaded.name).stem}_{ENVIRONMENTS[environment]}_結算結果.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
+        if st.button("儲存本次歷史報表紀錄", use_container_width=True):
+            try:
+                save_history(history_file, uploaded.name, result)
+                st.success("歷史紀錄已儲存。")
+            except (OSError, ValueError):
+                st.error("歷史紀錄無法儲存，請聯絡管理者檢查資料目錄。")
+
+    st.divider()
+    st.subheader("我的歷史報表紀錄")
+    st.caption("僅顯示目前帳號、目前環境的資料；Community Cloud 本機紀錄可能因重新部署或重啟而遺失。")
+    history = []
+    if history_file.exists():
+        try:
+            history = json.loads(history_file.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            st.error("歷史紀錄讀取失敗，請聯絡管理者。")
+            st.stop()
+    if history:
+        st.dataframe(pd.DataFrame(history), hide_index=True, use_container_width=True)
+    else:
+        st.caption("尚無歷史紀錄。")

@@ -6,3 +6,7 @@ data/*.db
 .streamlit/secrets.toml
 test_data/*.xlsx
 
+
+data/
+.coverage
+htmlcov/
