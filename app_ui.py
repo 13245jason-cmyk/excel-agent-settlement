@@ -7,13 +7,9 @@ import hashlib
 import json
 import re
 
-from member_commission import (parse_member_accounts, calculate_member_commission, export_member_commission,
-                               parse_agent_accounts, calculate_agent_commission, export_agent_commission)
-
 from access import account_data_dir, require_login
 from authentication import ENVIRONMENTS
 
-import pandas as pd
 import streamlit as st
 
 from settlement import (
@@ -55,6 +51,10 @@ def read_parameters(rate_inputs: dict, ratio_input: str):
 
 
 def render_member_commission(uploaded, rates, ratio_input, *, agent_mode=False, environment="staging"):
+    from member_commission import (parse_member_accounts, calculate_member_commission, export_member_commission,
+                                   parse_agent_accounts, calculate_agent_commission, export_agent_commission)
+    import pandas as pd
+
     label = "代理" if agent_mode else "會員"
     sheet_name = "下線代理" if agent_mode else "直屬會員"
     cache_key = "agent_upload" if agent_mode else "member_upload"
@@ -121,16 +121,20 @@ def render_member_commission(uploaded, rates, ratio_input, *, agent_mode=False, 
 def run_app(environment: str) -> None:
     st.set_page_config(page_title="Excel 代理結算系統", page_icon="🧾", layout="wide")
     st.title(f"🧾 Excel 代理結算系統｜{ENVIRONMENTS[environment]}")
+    st.caption("版本：account-picker-v2")
     if environment == "staging":
         st.warning("🧪 內部測試環境：請使用測試報表，結果不可作為正式付款依據。")
     account = require_login(environment)
+    # Keep report/table dependencies off the initial login path.
+    import pandas as pd
+
     mode = st.radio("計算模式", ["整體代理結算", "單一會員佣金", "單一下線代理佣金"], key="calculation_mode")
     member_mode = mode != "整體代理結算"
     agent_mode = mode == "單一下線代理佣金"
     data_dir = account_data_dir(BASE_DIR, environment, account)
     settings_file = data_dir / "settings.json"
     history_file = data_dir / "history.json"
-    st.caption("版本：account-picker-v1｜上傳報表後，系統會從「下線代理」與「直屬會員」分頁加總，並以 Decimal 精準計算。")
+    st.caption("上傳報表後，系統會從「下線代理」與「直屬會員」分頁加總，並以 Decimal 精準計算。")
 
     try:
         settings = load_settings(settings_file)

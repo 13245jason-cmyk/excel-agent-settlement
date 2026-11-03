@@ -131,7 +131,7 @@ python -m compileall -q authentication.py access.py app_ui.py app.py staging_app
 
 ## 單一會員佣金與結算
 
-此功能已開放於正式 `main/app.py` 與測試 `staging/staging_app.py`。登入後選「單一會員佣金」，上傳報表，再選擇會員帳號。測試分支 `account-picker-v1` 使用帳號搜尋欄與點選清單；正式版 `settlement-release-v1` 仍使用下拉選單。
+此功能已開放於正式 `main/app.py` 與測試 `staging/staging_app.py`。登入後選「單一會員佣金」，上傳報表，再選擇會員帳號。測試分支 `account-picker-v2` 使用帳號搜尋欄與點選清單；正式版 `settlement-release-v1` 仍使用下拉選單。
 
 - 只讀「直屬會員」分頁；依會員帳號、遊戲分類、有效投注、輸贏金額標題定位。
 - 帳號不分大小寫；支援會員帳號欄合併儲存格。沒有明確帳號且不是合併儲存格的遊戲列會報錯，不猜測歸屬。
@@ -177,6 +177,15 @@ Streamlit Community Cloud 需監看 `main`、Main file 為 `app.py`；平台完�
 - 沒有符合帳號時明確提示，並清除本次畫面的計算明細、金額與下載按鈕。
 - 89 項自動測試通過。隔離 Chromium 使用合成帳號與報表，刻意阻擋 Selectbox JavaScript，完成登入、上傳、會員及代理切換、搜尋、無符合結果與倍率重算；帳號操作未請求 Selectbox，無 JavaScript 錯誤。
 - 這是避開失敗元件的修正，並未證實 Community Cloud 靜態檔案失敗的上游原因；遠端部署完成狀態需在站台確認。報表、佣金公式與登入設定不變。
+
+## 登入頁啟動優化：account-picker-v2（測試分支）
+
+保留上一版帳號搜尋與清單，並把 pandas、openpyxl、單一帳號計算模組延後載入。未登入時先顯示登入畫面；登入後才載入表格套件，讀取或匯出 Excel 時才載入 Excel 套件。登入頁即顯示版本 `account-picker-v2`，方便核對部署版本。
+
+- 同一開發環境以五次全新 Python 程序量測 `import app_ui`，中位時間由 0.996 秒降至 0.397 秒。這只代表程式載入時間，不代表遠端開站時間或網路等待改善比例。
+- `npm run build` 通過，包含 Python 編譯與 91 項測試。新增正式／測試入口的全新程序測試，確認匿名使用者可看見登入欄位，尚未載入報表套件，也看不到財務操作；既有測試驗證登入、報表解析、三種模式、Decimal 計算與 Excel 匯出。
+- 這次改動僅發布 `staging`；正式站需取得本次發布的明確同意後才更新。GitHub 推送成功不代表已確認 Community Cloud 部署完成，請以登入頁版本確認。
+- Community Cloud 主機休眠喚醒、部署與瀏覽器靜態檔案載入仍可能等待。若需避免主機休眠造成的首開延遲，需另外評估常駐主機及費用；目前沒有搬遷主機或變更平台設定。
 
 ## Google 登入與申請審核（測試站開發中）
 
