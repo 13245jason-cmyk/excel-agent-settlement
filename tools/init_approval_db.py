@@ -5,12 +5,16 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from approvals import ApprovalStore
+from runtime_database import database_url
 
 if __name__ == '__main__':
-    url = os.environ.get('APPROVAL_DATABASE_URL')
+    try:
+        url = database_url(direct=True)
+    except ValueError:
+        raise SystemExit('請先執行 neon deploy 或設定 DATABASE_URL_UNPOOLED。')
     owner = os.environ.get('APPROVAL_ADMIN_EMAIL')
     if not url or not owner:
-        raise SystemExit('請先在安全環境設定 APPROVAL_DATABASE_URL 與 APPROVAL_ADMIN_EMAIL。')
+        raise SystemExit('請先在安全環境設定資料庫連線與 APPROVAL_ADMIN_EMAIL。')
     try:
         ApprovalStore.connect(url, [owner]).initialize()
     except Exception:

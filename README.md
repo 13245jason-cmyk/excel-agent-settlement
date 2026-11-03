@@ -174,3 +174,7 @@ Streamlit Community Cloud 需監看 `main`、Main file 為 `app.py`；平台完�
 新增獨立授權管理入口 `approval_app.py`、Google 原生 OIDC 登入、使用申請／管理者核准／拒絕／停用、PostgreSQL 持久審核與操作紀錄。僅發布 `staging`，不改正式站目前的密碼登入。未切換 Secrets 前，測試站也保留現有帳密功能。
 
 詳細設定與尚需外部驗證事項見 [GOOGLE_AUTH_SETUP.md](GOOGLE_AUTH_SETUP.md)。之後每次需求均先測試站完成，取得使用者對該次發布的明確同意後才更新 `main`；此流程也記錄於 `AGENTS.md`。
+
+## Neon CLI 與環境變數整合（測試分支）
+
+Neon 初始化設定與 Python 的 `DATABASE_URL`／`DATABASE_URL_UNPOOLED` 支援已加入；保留 SQLAlchemy + psycopg。`npm run build` 會執行 Python 編譯與測試，`npm start` 啟動 Streamlit 測試入口。真正的 Neon 部署、認證與端到端檢查狀態詳見 [NEON_SETUP.md](NEON_SETUP.md)，不能以本機測試通過替代真實資料庫驗證。

@@ -13,3 +13,5 @@ htmlcov/
 .env
 .env.*
 local-only/
+.neon
+node_modules/

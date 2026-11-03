@@ -7,6 +7,7 @@ import streamlit as st
 
 from authentication import Account, ENVIRONMENTS, IDLE_TIMEOUT, SESSION_LIFETIME
 from approvals import ApprovalError, ApprovalStore, GOOGLE_METADATA, verified_identity
+from runtime_database import database_url
 
 
 def clear(*, preserve_controls=False):
@@ -31,8 +32,7 @@ def validate_config(config, environment):
     admins = config.get('authorization', {}).get('admin_emails')
     if not isinstance(admins, list) or not admins or any(not isinstance(e,str) or '@' not in e for e in admins):
         raise ApprovalError('請設定授權管理者 Google 電子郵件')
-    if not config.get('approval_db', {}).get('url'):
-        raise ApprovalError('尚未設定持久授權資料庫')
+    database_url(config)
     return tuple(sorted(e.strip().lower() for e in admins))
 
 
@@ -47,7 +47,7 @@ def setup(environment):
     try:
         config = st.secrets.to_dict()
         admins = validate_config(config, environment)
-        return config, get_store(config['approval_db']['url'], admins)
+        return config, get_store(database_url(config), admins)
     except Exception:
         clear()
         st.error('Google 登入／授權資料庫尚未設定完成或暫時無法連線，報表功能已鎖定。請聯絡管理者。')
@@ -88,7 +88,7 @@ def approval_watchdog(environment):
     try:
         config = st.secrets.to_dict()
         admins = validate_config(config, environment)
-        store = get_store(config['approval_db']['url'], admins)
+        store = get_store(database_url(config), admins)
         identity = verified_identity(st.user.to_dict())
         authorized = store.status(identity, environment) == 'approved'
         now = time.time()

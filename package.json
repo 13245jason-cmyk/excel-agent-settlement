@@ -1,0 +1,16 @@
+{
+  "dependencies": {
+    "@neon/config": "^1.10.0",
+    "@neon/env": "^1.6.8"
+  },
+  "name": "excel-agent-settlement-tools",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build": "node tools/python-task.mjs build",
+    "start": "node tools/python-task.mjs start",
+    "test": "node tools/python-task.mjs test",
+    "db:init": "node tools/python-task.mjs db:init",
+    "db:check": "node tools/python-task.mjs db:check"
+  }
+}
