@@ -131,7 +131,7 @@ python -m compileall -q authentication.py access.py app_ui.py app.py staging_app
 
 ## 單一會員佣金與結算
 
-此功能已開放於正式 `main/app.py` 與測試 `staging/staging_app.py`。登入後選「單一會員佣金」，上傳報表，再選擇會員帳號。測試分支 `account-picker-v2` 使用帳號搜尋欄與點選清單；正式版 `settlement-release-v1` 仍使用下拉選單。
+此功能已開放於正式 `main/app.py` 與測試 `staging/staging_app.py`。登入後選「單一會員佣金」，上傳報表，再選擇會員帳號。測試分支 `report-display-v1` 使用帳號搜尋欄與點選清單；正式版 `settlement-release-v1` 仍使用下拉選單。
 
 - 只讀「直屬會員」分頁；依會員帳號、遊戲分類、有效投注、輸贏金額標題定位。
 - 帳號不分大小寫；支援會員帳號欄合併儲存格。沒有明確帳號且不是合併儲存格的遊戲列會報錯，不猜測歸屬。
@@ -186,6 +186,15 @@ Streamlit Community Cloud 需監看 `main`、Main file 為 `app.py`；平台完�
 - `npm run build` 通過，包含 Python 編譯與 91 項測試。新增正式／測試入口的全新程序測試，確認匿名使用者可看見登入欄位，尚未載入報表套件，也看不到財務操作；既有測試驗證登入、報表解析、三種模式、Decimal 計算與 Excel 匯出。
 - 這次改動僅發布 `staging`；正式站需取得本次發布的明確同意後才更新。GitHub 推送成功不代表已確認 Community Cloud 部署完成，請以登入頁版本確認。
 - Community Cloud 主機休眠喚醒、部署與瀏覽器靜態檔案載入仍可能等待。若需避免主機休眠造成的首開延遲，需另外評估常駐主機及費用；目前沒有搬遷主機或變更平台設定。
+
+## 上傳後表格相容顯示：report-display-v1（測試分支）
+
+整體代理、單一會員、單一下線代理的結果與歷史紀錄改用一般 HTML 表格，透過已載入的 Markdown 元件顯示，避免額外下載互動表格的 DataFrame 模組。小螢幕可左右捲動；表格不再提供互動排序、選取或全螢幕工具，Excel 下載與計算保持原功能。所有欄名、內容及表格標籤都先跳脫 HTML，報表檔名不會被當成程式或標籤執行。
+
+- 原版在隔離 Chromium 刻意阻擋 `DataFrame.*.js` 後，可重現上傳後的動態模組載入錯誤。修正版在阻擋 DataFrame、Table、Selectbox 模組時，完成報表上傳、整體金額、歷史保存與顯示、會員與代理選取、倍率重算及 Excel 下載；沒有請求上述模組，也沒有 JavaScript 錯誤。使用的帳號及報表皆為合成測試資料。
+- `npm run build` 通過：Python 編譯與 94 項測試，包含顯示金額、HTML 跳脫與空表格不補列的回歸檢查。
+- 此改動是減少前端載入依賴的相容修正。使用者尚未提供這次錯誤的完整站台與失敗 JavaScript 網址，不能據此確認遠端上游原因，其他元件或網路失敗仍可能需要另外排查。
+- 僅發布 `staging`，正式 `main` 尚未更新；部署完成後登入頁顯示 `report-display-v1`，實際 Community Cloud 更新狀態仍需確認。
 
 ## Google 登入與申請審核（測試站開發中）
 

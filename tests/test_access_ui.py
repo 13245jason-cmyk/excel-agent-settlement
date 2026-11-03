@@ -135,8 +135,12 @@ def test_report_computation_still_uses_only_present_games(account, monkeypatch):
     assert at.metric[0].value == "-10.00"
     assert at.metric[1].value == "2.58"
     assert at.metric[3].value == "-5.94"
-    assert len(at.dataframe[0].value) == 1
-    assert at.dataframe[0].value.iloc[0]["遊戲類型"] == "Slots"
+    assert len(at.dataframe) == 0
+    table = next(m.value for m in at.markdown if 'aria-label="各遊戲有效投注及佣金明細"' in m.value)
+    assert table.count("<tbody><tr>") == 1
+    assert "<td>Slots</td>" in table
+    assert "<td>100.00</td>" in table
+    assert "<td>2.58</td>" in table
 
 
 @pytest.mark.parametrize("environment", ["production", "staging"])
@@ -155,7 +159,9 @@ def test_single_member_selection_and_rate_recalculation(account, monkeypatch, en
     at.radio(key="calculation_mode").set_value("單一會員佣金").run()
     assert not at.exception
     assert at.metric[2].value == "2.58"
-    assert len(at.dataframe[0].value) == 1
+    assert len(at.dataframe) == 0
+    table = next(m.value for m in at.markdown if 'aria-label="會員遊戲佣金明細"' in m.value)
+    assert "<td>Slots</td>" in table and "<td>2.58</td>" in table
     assert at.text_input(key="ratio").value == "0.8"
     at.text_input(key="rate_Slots").set_value("0.03").run()
     assert at.metric[2].value == "3.00"
