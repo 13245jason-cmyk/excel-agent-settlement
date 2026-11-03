@@ -7,9 +7,6 @@ from io import BytesIO
 from pathlib import Path
 from typing import BinaryIO
 
-from openpyxl import Workbook, load_workbook
-from openpyxl.styles import Font
-
 DEFAULT_RATES = {"Slots": Decimal("0.0258"), "MiniGame": Decimal("0.0258"), "Casino1": Decimal("0.011"), "Casino2": Decimal("0.007"), "Sports": Decimal("0")}
 DEFAULT_SETTLEMENT_RATIO = Decimal("0.8")
 GAMES = tuple(DEFAULT_RATES)
@@ -46,6 +43,8 @@ def _find_sheet(wb, title: str):
 
 
 def parse_report(source: str | Path | BinaryIO) -> dict:
+    from openpyxl import load_workbook
+
     try:
         wb = load_workbook(source, data_only=True, read_only=True)
     except Exception as exc:
@@ -128,6 +127,9 @@ def save_history(path: Path, filename: str, result: dict) -> None:
 
 
 def export_result_xlsx(report: dict, result: dict) -> bytes:
+    from openpyxl import Workbook
+    from openpyxl.styles import Font
+
     wb = Workbook()
     ws = wb.active
     ws.title = "結算結果"

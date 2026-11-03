@@ -6,14 +6,11 @@ from pathlib import Path
 import hashlib
 import json
 import re
-
-from member_commission import (parse_member_accounts, calculate_member_commission, export_member_commission,
-                               parse_agent_accounts, calculate_agent_commission, export_agent_commission)
+from html import escape
 
 from access import account_data_dir, require_login
 from authentication import ENVIRONMENTS
 
-import pandas as pd
 import streamlit as st
 
 from settlement import (
@@ -29,6 +26,23 @@ from settlement import (
 )
 
 BASE_DIR = Path(__file__).parent
+
+
+def table_html(rows: list[dict], label: str) -> str:
+    """Render small result tables without loading the interactive grid bundle."""
+    if not rows:
+        return ""
+    columns = list(dict.fromkeys(key for row in rows for key in row))
+    header = "".join(f'<th scope="col">{escape(str(column))}</th>' for column in columns)
+    body = "".join(
+        "<tr>" + "".join(f"<td>{escape(str(row.get(column, '')))}</td>" for column in columns) + "</tr>"
+        for row in rows
+    )
+    return (
+        '<div style="overflow-x:auto">'
+        f'<table aria-label="{escape(label, quote=True)}">'
+        f"<thead><tr>{header}</tr></thead><tbody>{body}</tbody></table></div>"
+    )
 
 
 def dstr(value: Decimal) -> str:
@@ -54,7 +68,19 @@ def read_parameters(rate_inputs: dict, ratio_input: str):
     return rates, ratio
 
 
+def upload_report():
+    user_agent = st.context.headers.get("User-Agent", "")
+    mobile_default = any(device in user_agent for device in ("iPhone", "iPad", "iPod"))
+    if st.checkbox("手機相容上傳", value=mobile_default, key="compatible_upload"):
+        from mobile_upload import compatible_file_uploader
+        st.caption("iPhone 上傳失敗時可使用此模式，每份報表最多 10 MB。")
+        return compatible_file_uploader()
+    return st.file_uploader("報表上傳區（.xlsx）", type=["xlsx"])
+
+
 def render_member_commission(uploaded, rates, ratio_input, *, agent_mode=False, environment="staging"):
+    from member_commission import (parse_member_accounts, calculate_member_commission, export_member_commission,
+                                   parse_agent_accounts, calculate_agent_commission, export_agent_commission)
     label = "代理" if agent_mode else "會員"
     sheet_name = "下線代理" if agent_mode else "直屬會員"
     cache_key = "agent_upload" if agent_mode else "member_upload"
@@ -69,18 +95,28 @@ def render_member_commission(uploaded, rates, ratio_input, *, agent_mode=False, 
             cached = {"digest": digest, "members": parser(io.BytesIO(data))}
             st.session_state[cache_key] = cached
         members = cached["members"]
-        chosen = st.selectbox(f"{label}帳號", options=list(members),
-                              format_func=lambda key: members[key]["account"], key=f"{cache_key}_account_{digest}")
+        search = st.text_input(f"搜尋{label}帳號", placeholder="輸入完整帳號或部分文字", key=f"{cache_key}_search_{digest}").strip().casefold()
+        matches = [key for key, member in members.items() if search in member["account"].casefold()]
+        st.caption(f"「{sheet_name}」共 {len(members)} 個帳號，符合搜尋 {len(matches)} 個。")
+        if not matches:
+            st.warning(f"找不到符合的{label}帳號，請確認拼字或清空搜尋條件。")
+            return
+        if len(matches) > 50:
+            st.info("先顯示前 50 個帳號，請輸入更多文字縮小搜尋範圍。")
+        search_id = hashlib.sha256(search.encode()).hexdigest()[:16]
+        chosen = st.radio(f"{label}帳號", options=matches[:50],
+                          format_func=lambda key: members[key]["account"],
+                          key=f"{cache_key}_account_{digest}_{search_id}")
         parsed_rates, ratio = read_parameters(rates, ratio_input)
         result = calculate(members, chosen, parsed_rates, ratio)
         st.subheader(f"{label} {result['account']} 的佣金明細")
         st.caption(f"來源：{sheet_name}。結算公式：（該帳號輸贏＋總佣金）×目前結算比例。")
-        st.dataframe(pd.DataFrame([
+        st.markdown(table_html([
             {"遊戲類型": game, "有效投注": dstr(item["valid_bet"]),
              "輸贏金額（參考）": dstr(item["win_loss"]), "倍率": str(item["rate"]),
              "佣金": str(item["commission"].quantize(Decimal('.01'), rounding=ROUND_HALF_UP))}
             for game,item in result["games"].items()
-        ]), hide_index=True, use_container_width=True)
+        ], f"{label}遊戲佣金明細"), unsafe_allow_html=True)
         c1,c2,c3 = st.columns(3)
         c1.metric(f"{label}有效投注", dstr(result["total_valid_bet"]))
         c2.metric(f"{label}輸贏（參考）", dstr(result["total_win_loss"]))
@@ -111,6 +147,7 @@ def render_member_commission(uploaded, rates, ratio_input, *, agent_mode=False, 
 def run_app(environment: str) -> None:
     st.set_page_config(page_title="Excel 代理結算系統", page_icon="🧾", layout="wide")
     st.title(f"🧾 Excel 代理結算系統｜{ENVIRONMENTS[environment]}")
+    st.caption("版本：mobile-upload-v1")
     if environment == "staging":
         st.warning("🧪 內部測試環境：請使用測試報表，結果不可作為正式付款依據。")
     account = require_login(environment)
@@ -120,7 +157,7 @@ def run_app(environment: str) -> None:
     data_dir = account_data_dir(BASE_DIR, environment, account)
     settings_file = data_dir / "settings.json"
     history_file = data_dir / "history.json"
-    st.caption("版本：settlement-release-v1｜上傳報表後，系統會從「下線代理」與「直屬會員」分頁加總，並以 Decimal 精準計算。")
+    st.caption("上傳報表後，系統會從「下線代理」與「直屬會員」分頁加總，並以 Decimal 精準計算。")
 
     try:
         settings = load_settings(settings_file)
@@ -146,7 +183,7 @@ def run_app(environment: str) -> None:
             except (InvalidOperation, ValueError, OSError):
                 st.error("設定必須是 0 到 1 的有效數字，且儲存目錄必須可寫入。")
 
-    uploaded = st.file_uploader("報表上傳區（.xlsx）", type=["xlsx"])
+    uploaded = upload_report()
 
     if member_mode:
         if uploaded:
@@ -175,7 +212,7 @@ def run_app(environment: str) -> None:
         for game, item in result["games"].items():
             rows.append({"遊戲類型": game, "有效投注": dstr(item["valid_bet"]), "佣金倍率": str(item["rate"]), "佣金": dstr(item["commission"])})
         st.subheader("各遊戲有效投注及佣金明細")
-        st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True)
+        st.markdown(table_html(rows, "各遊戲有效投注及佣金明細"), unsafe_allow_html=True)
 
         c1, c2, c3, c4 = st.columns(4)
         c1.metric("總輸贏", dstr(result["total_win_loss"]))
@@ -211,6 +248,6 @@ def run_app(environment: str) -> None:
             st.error("歷史紀錄讀取失敗，請聯絡管理者。")
             st.stop()
     if history:
-        st.dataframe(pd.DataFrame(history), hide_index=True, use_container_width=True)
+        st.markdown(table_html(history, "我的歷史報表紀錄"), unsafe_allow_html=True)
     else:
         st.caption("尚無歷史紀錄。")

@@ -135,8 +135,12 @@ def test_report_computation_still_uses_only_present_games(account, monkeypatch):
     assert at.metric[0].value == "-10.00"
     assert at.metric[1].value == "2.58"
     assert at.metric[3].value == "-5.94"
-    assert len(at.dataframe[0].value) == 1
-    assert at.dataframe[0].value.iloc[0]["遊戲類型"] == "Slots"
+    assert len(at.dataframe) == 0
+    table = next(m.value for m in at.markdown if 'aria-label="各遊戲有效投注及佣金明細"' in m.value)
+    assert table.count("<tbody><tr>") == 1
+    assert "<td>Slots</td>" in table
+    assert "<td>100.00</td>" in table
+    assert "<td>2.58</td>" in table
 
 
 @pytest.mark.parametrize("environment", ["production", "staging"])
@@ -155,11 +159,13 @@ def test_single_member_selection_and_rate_recalculation(account, monkeypatch, en
     at.radio(key="calculation_mode").set_value("單一會員佣金").run()
     assert not at.exception
     assert at.metric[2].value == "2.58"
-    assert len(at.dataframe[0].value) == 1
+    assert len(at.dataframe) == 0
+    table = next(m.value for m in at.markdown if 'aria-label="會員遊戲佣金明細"' in m.value)
+    assert "<td>Slots</td>" in table and "<td>2.58</td>" in table
     assert at.text_input(key="ratio").value == "0.8"
     at.text_input(key="rate_Slots").set_value("0.03").run()
     assert at.metric[2].value == "3.00"
-    at.selectbox[0].set_value("sample_b").run()
+    next(s for s in at.radio if s.label in ("會員帳號", "代理帳號")).set_value("sample_b").run()
     assert at.metric[2].value == "27.00"
     assert len(at.get("download_button")) == 1
     assert not any(s.value == "我的歷史報表紀錄" for s in at.subheader)
@@ -182,15 +188,15 @@ def test_agent_mode_switch_and_recalculate(account, monkeypatch, environment):
     at=login(app(account,environment).run())
     at.radio(key='calculation_mode').set_value('單一下線代理佣金').run()
     assert not at.exception
-    assert at.selectbox[0].label=='代理帳號'
+    assert next(s for s in at.radio if s.label in ("會員帳號", "代理帳號")).label=='代理帳號'
     assert at.metric[2].label=='代理總佣金'
     assert at.metric[2].value=='2.58'
-    at.selectbox[0].set_value('sample_b').run()
+    next(s for s in at.radio if s.label in ("會員帳號", "代理帳號")).set_value('sample_b').run()
     assert at.metric[2].value=='23.22'
     at.text_input(key='rate_Slots').set_value('0.03').run()
     assert at.metric[2].value=='27.00'
     at.radio(key='calculation_mode').set_value('單一會員佣金').run()
-    assert at.selectbox[0].label=='會員帳號'
+    assert next(s for s in at.radio if s.label in ("會員帳號", "代理帳號")).label=='會員帳號'
     assert at.metric[2].value=='30.00'
     at.radio(key='calculation_mode').set_value('單一下線代理佣金').run()
     assert at.metric[2].label=='代理總佣金'
@@ -238,3 +244,57 @@ def test_single_account_download_identifies_environment(account, monkeypatch, en
         assert filenames[-1].startswith(prefix)
     if environment=='production':
         assert not any('內部測試環境' in warning.value for warning in at.warning)
+
+
+def test_account_search_and_missing_account_clear_results(account,monkeypatch):
+    from test_sports_settlement import sports_report
+    buf=io.BytesIO(sports_report());buf.name='synthetic-search.xlsx'
+    monkeypatch.setattr(app_ui.st,'file_uploader',lambda *a,**k:buf)
+    at=login(app(account,'staging').run())
+    at.radio(key='calculation_mode').set_value('單一會員佣金').run()
+    assert len(at.selectbox)==0
+    search=next(t for t in at.text_input if t.label=='搜尋會員帳號')
+    search.set_value('MEMBER_B').run()
+    picker=next(r for r in at.radio if r.label=='會員帳號')
+    assert picker.options==['Member_B']
+    assert at.metric[0].value=='2,000.00'
+    next(t for t in at.text_input if t.label=='搜尋會員帳號').set_value('no-such-account').run()
+    assert any('找不到符合' in w.value for w in at.warning)
+    assert len(at.metric)==0 and len(at.get('download_button'))==0
+    next(t for t in at.text_input if t.label=='搜尋會員帳號').set_value('').run()
+    assert len(next(r for r in at.radio if r.label=='會員帳號').options)==2
+    at.radio(key='calculation_mode').set_value('單一下線代理佣金').run()
+    assert len(at.selectbox)==0
+    assert next(r for r in at.radio if r.label=='代理帳號').options==['Agent_A']
+
+
+@pytest.mark.parametrize("environment", ["production", "staging"])
+def test_compatible_upload_computes_all_modes_and_logout_clears_file(account, monkeypatch, environment):
+    import base64
+    import mobile_upload
+    from test_sports_settlement import sports_report
+    data = sports_report()
+    value = {"name": "synthetic.xlsx", "size": len(data), "data": base64.b64encode(data).decode()}
+    monkeypatch.setattr(mobile_upload, "_upload_component", lambda **kwargs: value)
+    at = login(app(account, environment).run())
+    at.checkbox(key="compatible_upload").check().run()
+    assert not at.exception and len(at.get("file_uploader")) == 0
+    assert next(m.value for m in at.metric if m.label == '最終結算') == '22.19'
+    nonce = at.session_state['compatible_upload_nonce']
+    for mode, amount in [('單一會員佣金', '-51.87'), ('單一下線代理佣金', '-85.94')]:
+        at.radio(key='calculation_mode').set_value(mode).run()
+        assert not at.exception
+        assert next(m.value for m in at.metric if m.label == '最終結算') == amount
+        assert len(at.get('download_button')) == 1
+    value = None
+    at.run()
+    assert len(at.metric) == 0 and len(at.get('download_button')) == 0
+    value = {'name': 'bad.xlsx', 'size': 1, 'data': '!!!'}
+    at.run()
+    assert at.error and len(at.metric) == 0
+    at.button(key='logout').click().run()
+    assert 'compatible_upload_nonce' not in at.session_state
+    assert len(at.metric) == 0
+    login(at)
+    at.checkbox(key="compatible_upload").check().run()
+    assert at.session_state['compatible_upload_nonce'] != nonce

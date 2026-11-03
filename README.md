@@ -115,12 +115,12 @@ streamlit run staging_app.py --server.port 8502
 
 ```bash
 python -m pytest -q
-python -m compileall -q authentication.py access.py app_ui.py app.py staging_app.py tools
+python -m compileall -q authentication.py access.py app_ui.py app.py staging_app.py mobile_upload.py settlement.py member_commission.py tools
 ```
 
 測試包括既有結算、密碼雜湊與驗證、缺少設定時鎖定、未登入不得存取報表、錯誤帳密與錯誤環境、嘗試次數限制、登入逾時／帳號停用／密碼更換、登出清除資料、每帳號與環境資料隔離、登入後只有 Slots 的報表仍能結算。測試使用合成資料與專用測試密碼。
 
-未來開發先推送 `staging` 並驗證測試站，再把同一版合併至 `main`，使正式站更新。兩個分支的後續修改不會自動同步。只有平台完成部署並在實際網址測試後，才可確認線上版本已啟用。
+未來開發先推送 `staging` 並驗證測試站，取得使用者對該次發布的明確同意後，只將已驗證的功能套用至 `main`。兩個分支的後續修改不會自動同步。只有平台完成部署並在實際網址測試後，才可確認線上版本已啟用。
 
 ## 本次驗證狀態
 
@@ -131,7 +131,7 @@ python -m compileall -q authentication.py access.py app_ui.py app.py staging_app
 
 ## 單一會員佣金與結算
 
-此功能已開放於正式 `main/app.py` 與測試 `staging/staging_app.py`。登入後選「單一會員佣金」，上傳報表，再在「會員帳號」下拉選單搜尋／選擇會員。
+此功能已開放於正式 `main/app.py` 與測試 `staging/staging_app.py`。登入後選「單一會員佣金」，上傳報表，在搜尋欄輸入完整帳號或部分文字，再從清單點選會員。搜尋不分大小寫；符合超過 50 個時先顯示前 50 個，搜尋仍涵蓋全部帳號。沒有符合帳號時會提示，且不顯示舊金額或下載按鈕。
 
 - 只讀「直屬會員」分頁；依會員帳號、遊戲分類、有效投注、輸贏金額標題定位。
 - 帳號不分大小寫；支援會員帳號欄合併儲存格。沒有明確帳號且不是合併儲存格的遊戲列會報錯，不猜測歸屬。
@@ -168,3 +168,15 @@ python -m compileall -q authentication.py access.py app_ui.py app.py staging_app
 登入設定、帳號權限與 `data/production/`、`data/staging/` 隔離方式不變，不會把測試站帳號或測試資料搬到正式站。正式站首次新增的 Sports 預設倍率為 0，請在左側確認正確倍率與比例後儲存。
 
 Streamlit Community Cloud 需監看 `main`、Main file 為 `app.py`；平台完成自動更新後，登入可見版本 `settlement-release-v1`。若仍是舊版本，可在 Community Cloud 管理頁確認最新提交並重新啟動 App。正式站必須保留 `deployment.environment = "production"` 的 Secrets。
+
+## 正式版發布：mobile-upload-v1
+
+經使用者確認測試站可用並同意，將帳號搜尋與點選、一般結果表格、登入頁載入優化、手機相容上傳套用至正式 `main/app.py`。正式站為 https://excel-agent-settlement.streamlit.app/ ，登入頁版本顯示 `mobile-upload-v1`。Community Cloud 自動更新的完成狀態仍須在實際網址確認。
+
+- iPhone、iPad、iPod 預設勾選「手機相容上傳」，其他瀏覽器亦可手動切換。相容模式僅接受非空白 `.xlsx`，每檔最多 10 MB；一般電腦上傳維持原有操作。
+- 相容元件使用內嵌 JavaScript 與 FileReader，透過現有工作階段連線傳送檔案，避免選檔後再動態載入上傳用的 axios 模組。瀏覽器與後端均檢查大小、格式及編碼完整性，再交給既有 Excel 解析器；原始檔案不寫入磁碟，不放入跨使用者快取。每次登入建立獨立元件識別碼，登出清除。
+- 整體、會員、代理及歷史明細改用一般表格，避免互動表格的額外載入依賴；小螢幕可橫向捲動，表格不再提供互動排序、選取或全螢幕工具，仍可下載 Excel。所有表格內容先跳脫 HTML。
+- 登入前延後載入報表套件。開發環境五次全新 Python 程序量測的模組載入中位時間由 0.996 秒降至 0.397 秒；此數字不是遠端開站速度，無法消除主機休眠喚醒及網路延遲。
+- 沿用正式站現有帳密登入、Secrets、佣金倍率、結算公式與環境資料隔離。本次發布不包含測試中的 Google 登入、授權管理或 Neon 整合，也不將測試帳號及資料帶到正式站。
+- 測試站版本已通過 109 項自動測試與 Chromium 手機模擬的上傳、三種計算、下載、錯誤拒絕及登出流程，使用者亦已確認實際 iPhone Safari 可用。自動 WebKit 安裝受環境網路限制而未完成；不將 Chromium 模擬視為自動 Safari 驗證。
+- 正式候選版通過 Python 編譯與 80 項測試，包含正式／測試環境的相容上傳與登出隔離。正式 `app.py` 隔離副本亦通過 Chromium 手機模擬：阻擋 axios 模組時仍可上傳、完成三種計算、下載標示「正式使用」的 Excel、移除及重選檔案、拒絕錯誤副檔名與登出。此 80 項為正式分支的測試集合，不含仍留在測試分支的 Google／Neon 測試。
