@@ -131,7 +131,7 @@ python -m compileall -q authentication.py access.py app_ui.py app.py staging_app
 
 ## 單一會員佣金與結算
 
-此功能已開放於正式 `main/app.py` 與測試 `staging/staging_app.py`。登入後選「單一會員佣金」，上傳報表，再在「會員帳號」下拉選單搜尋／選擇會員。
+此功能已開放於正式 `main/app.py` 與測試 `staging/staging_app.py`。登入後選「單一會員佣金」，上傳報表，再選擇會員帳號。測試分支 `account-picker-v1` 使用帳號搜尋欄與點選清單；正式版 `settlement-release-v1` 仍使用下拉選單。
 
 - 只讀「直屬會員」分頁；依會員帳號、遊戲分類、有效投注、輸贏金額標題定位。
 - 帳號不分大小寫；支援會員帳號欄合併儲存格。沒有明確帳號且不是合併儲存格的遊戲列會報錯，不猜測歸屬。
@@ -168,6 +168,15 @@ python -m compileall -q authentication.py access.py app_ui.py app.py staging_app
 登入設定、帳號權限與 `data/production/`、`data/staging/` 隔離方式不變，不會把測試站帳號或測試資料搬到正式站。正式站首次新增的 Sports 預設倍率為 0，請在左側確認正確倍率與比例後儲存。
 
 Streamlit Community Cloud 需監看 `main`、Main file 為 `app.py`；平台完成自動更新後，登入可見版本 `settlement-release-v1`。若仍是舊版本，可在 Community Cloud 管理頁確認最新提交並重新啟動 App。正式站必須保留 `deployment.environment = "production"` 的 Secrets。
+
+## 帳號選取修正：account-picker-v1（測試分支）
+
+針對 `Failed to fetch dynamically imported module: .../Selectbox.DYo6P43Q.js`，會員與下線代理改為「搜尋帳號＋清單點選」，避免帳號選取依賴載入失敗的 Selectbox 元件。此修正尚未套用 `main`；測試完成後需取得使用者對本次發布的明確同意。
+
+- 搜尋不分大小寫，可輸入完整帳號或部分文字；清空可恢復清單。符合超過 50 個時顯示前 50 個，搜尋仍涵蓋全部帳號。
+- 沒有符合帳號時明確提示，並清除本次畫面的計算明細、金額與下載按鈕。
+- 89 項自動測試通過。隔離 Chromium 使用合成帳號與報表，刻意阻擋 Selectbox JavaScript，完成登入、上傳、會員及代理切換、搜尋、無符合結果與倍率重算；帳號操作未請求 Selectbox，無 JavaScript 錯誤。
+- 這是避開失敗元件的修正，並未證實 Community Cloud 靜態檔案失敗的上游原因；遠端部署完成狀態需在站台確認。報表、佣金公式與登入設定不變。
 
 ## Google 登入與申請審核（測試站開發中）
 

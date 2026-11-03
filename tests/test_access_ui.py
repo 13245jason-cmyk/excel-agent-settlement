@@ -159,7 +159,7 @@ def test_single_member_selection_and_rate_recalculation(account, monkeypatch, en
     assert at.text_input(key="ratio").value == "0.8"
     at.text_input(key="rate_Slots").set_value("0.03").run()
     assert at.metric[2].value == "3.00"
-    at.selectbox[0].set_value("sample_b").run()
+    next(s for s in at.radio if s.label in ("會員帳號", "代理帳號")).set_value("sample_b").run()
     assert at.metric[2].value == "27.00"
     assert len(at.get("download_button")) == 1
     assert not any(s.value == "我的歷史報表紀錄" for s in at.subheader)
@@ -182,15 +182,15 @@ def test_agent_mode_switch_and_recalculate(account, monkeypatch, environment):
     at=login(app(account,environment).run())
     at.radio(key='calculation_mode').set_value('單一下線代理佣金').run()
     assert not at.exception
-    assert at.selectbox[0].label=='代理帳號'
+    assert next(s for s in at.radio if s.label in ("會員帳號", "代理帳號")).label=='代理帳號'
     assert at.metric[2].label=='代理總佣金'
     assert at.metric[2].value=='2.58'
-    at.selectbox[0].set_value('sample_b').run()
+    next(s for s in at.radio if s.label in ("會員帳號", "代理帳號")).set_value('sample_b').run()
     assert at.metric[2].value=='23.22'
     at.text_input(key='rate_Slots').set_value('0.03').run()
     assert at.metric[2].value=='27.00'
     at.radio(key='calculation_mode').set_value('單一會員佣金').run()
-    assert at.selectbox[0].label=='會員帳號'
+    assert next(s for s in at.radio if s.label in ("會員帳號", "代理帳號")).label=='會員帳號'
     assert at.metric[2].value=='30.00'
     at.radio(key='calculation_mode').set_value('單一下線代理佣金').run()
     assert at.metric[2].label=='代理總佣金'
@@ -238,3 +238,25 @@ def test_single_account_download_identifies_environment(account, monkeypatch, en
         assert filenames[-1].startswith(prefix)
     if environment=='production':
         assert not any('內部測試環境' in warning.value for warning in at.warning)
+
+
+def test_account_search_and_missing_account_clear_results(account,monkeypatch):
+    from test_sports_settlement import sports_report
+    buf=io.BytesIO(sports_report());buf.name='synthetic-search.xlsx'
+    monkeypatch.setattr(app_ui.st,'file_uploader',lambda *a,**k:buf)
+    at=login(app(account,'staging').run())
+    at.radio(key='calculation_mode').set_value('單一會員佣金').run()
+    assert len(at.selectbox)==0
+    search=next(t for t in at.text_input if t.label=='搜尋會員帳號')
+    search.set_value('MEMBER_B').run()
+    picker=next(r for r in at.radio if r.label=='會員帳號')
+    assert picker.options==['Member_B']
+    assert at.metric[0].value=='2,000.00'
+    next(t for t in at.text_input if t.label=='搜尋會員帳號').set_value('no-such-account').run()
+    assert any('找不到符合' in w.value for w in at.warning)
+    assert len(at.metric)==0 and len(at.get('download_button'))==0
+    next(t for t in at.text_input if t.label=='搜尋會員帳號').set_value('').run()
+    assert len(next(r for r in at.radio if r.label=='會員帳號').options)==2
+    at.radio(key='calculation_mode').set_value('單一下線代理佣金').run()
+    assert len(at.selectbox)==0
+    assert next(r for r in at.radio if r.label=='代理帳號').options==['Agent_A']

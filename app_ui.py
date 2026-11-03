@@ -69,8 +69,18 @@ def render_member_commission(uploaded, rates, ratio_input, *, agent_mode=False, 
             cached = {"digest": digest, "members": parser(io.BytesIO(data))}
             st.session_state[cache_key] = cached
         members = cached["members"]
-        chosen = st.selectbox(f"{label}帳號", options=list(members),
-                              format_func=lambda key: members[key]["account"], key=f"{cache_key}_account_{digest}")
+        search = st.text_input(f"搜尋{label}帳號", placeholder="輸入完整帳號或部分文字", key=f"{cache_key}_search_{digest}").strip().casefold()
+        matches = [key for key, member in members.items() if search in member["account"].casefold()]
+        st.caption(f"「{sheet_name}」共 {len(members)} 個帳號，符合搜尋 {len(matches)} 個。")
+        if not matches:
+            st.warning(f"找不到符合的{label}帳號，請確認拼字或清空搜尋條件。")
+            return
+        if len(matches) > 50:
+            st.info("先顯示前 50 個帳號，請輸入更多文字縮小搜尋範圍。")
+        search_id = hashlib.sha256(search.encode()).hexdigest()[:16]
+        chosen = st.radio(f"{label}帳號", options=matches[:50],
+                          format_func=lambda key: members[key]["account"],
+                          key=f"{cache_key}_account_{digest}_{search_id}")
         parsed_rates, ratio = read_parameters(rates, ratio_input)
         result = calculate(members, chosen, parsed_rates, ratio)
         st.subheader(f"{label} {result['account']} 的佣金明細")
@@ -120,7 +130,7 @@ def run_app(environment: str) -> None:
     data_dir = account_data_dir(BASE_DIR, environment, account)
     settings_file = data_dir / "settings.json"
     history_file = data_dir / "history.json"
-    st.caption("版本：settlement-release-v1｜上傳報表後，系統會從「下線代理」與「直屬會員」分頁加總，並以 Decimal 精準計算。")
+    st.caption("版本：account-picker-v1｜上傳報表後，系統會從「下線代理」與「直屬會員」分頁加總，並以 Decimal 精準計算。")
 
     try:
         settings = load_settings(settings_file)
