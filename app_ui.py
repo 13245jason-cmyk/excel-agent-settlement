@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import io
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from pathlib import Path
 import hashlib
 import json
+import re
+
+from member_commission import parse_member_accounts, calculate_member_commission, export_member_commission
 
 from access import account_data_dir, require_login
 from authentication import ENVIRONMENTS
@@ -49,12 +52,48 @@ def read_parameters(rate_inputs: dict, ratio_input: str):
     return rates, ratio
 
 
+def render_member_commission(uploaded, rates):
+    try:
+        data = uploaded.getvalue()
+        digest = hashlib.sha256(data).hexdigest()
+        cached = st.session_state.get("member_upload")
+        if cached is None or cached["digest"] != digest:
+            cached = {"digest": digest, "members": parse_member_accounts(io.BytesIO(data))}
+            st.session_state.member_upload = cached
+        members = cached["members"]
+        chosen = st.selectbox("會員帳號", options=list(members),
+                              format_func=lambda key: members[key]["account"], key=f"member_account_{digest}")
+        result = calculate_member_commission(members, chosen, rates)
+        st.subheader(f"會員 {result['account']} 的佣金明細")
+        st.caption("來源：直屬會員。依目前佣金倍率計算；結算比例僅用於整體代理結算。")
+        st.dataframe(pd.DataFrame([
+            {"遊戲類型": game, "有效投注": dstr(item["valid_bet"]),
+             "輸贏金額（參考）": dstr(item["win_loss"]), "倍率": str(item["rate"]),
+             "佣金": str(item["commission"].quantize(Decimal('.01'), rounding=ROUND_HALF_UP))}
+            for game,item in result["games"].items()
+        ]), hide_index=True, use_container_width=True)
+        c1,c2,c3 = st.columns(3)
+        c1.metric("會員有效投注", dstr(result["total_valid_bet"]))
+        c2.metric("會員輸贏（參考）", dstr(result["total_win_loss"]))
+        c3.metric("會員總佣金", format(result["total_commission"].quantize(Decimal('.01'), rounding=ROUND_HALF_UP), ',.2f'))
+        st.caption(f"未捨入佣金：{result['total_commission']}。過程保留精度，顯示採四捨五入至兩位。")
+        safe_account = re.sub(r'[^a-zA-Z0-9_.-]', '_', result['account'])[:64]
+        st.download_button("下載會員佣金 Excel", export_member_commission(uploaded.name, result),
+                           file_name=f"內部測試_{safe_account}_會員佣金.xlsx",
+                           mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    except (SettlementError, InvalidOperation, ValueError) as exc:
+        st.error(str(exc))
+
+
 def run_app(environment: str) -> None:
     st.set_page_config(page_title="Excel 代理結算系統", page_icon="🧾", layout="wide")
     st.title(f"🧾 Excel 代理結算系統｜{ENVIRONMENTS[environment]}")
     if environment == "staging":
         st.warning("🧪 內部測試環境：請使用測試報表，結果不可作為正式付款依據。")
     account = require_login(environment)
+    member_mode = False
+    if environment == "staging":
+        member_mode = st.radio("計算模式", ["整體代理結算", "單一會員佣金"], key="calculation_mode") == "單一會員佣金"
     data_dir = account_data_dir(BASE_DIR, environment, account)
     settings_file = data_dir / "settings.json"
     history_file = data_dir / "history.json"
@@ -72,8 +111,10 @@ def run_app(environment: str) -> None:
             rate_inputs[game] = st.text_input(
                 f"{game} 倍率", value=str(settings["rates"].get(game, DEFAULT_RATES[game])), key=f"rate_{game}"
             )
-        st.header("結算比例設定")
-        ratio_input = st.text_input("結算比例", value=str(settings.get("settlement_ratio", DEFAULT_SETTLEMENT_RATIO)), key="ratio")
+        ratio_input = str(settings.get("settlement_ratio", DEFAULT_SETTLEMENT_RATIO))
+        if not member_mode:
+            st.header("結算比例設定")
+            ratio_input = st.text_input("結算比例", value=ratio_input, key="ratio")
         if st.button("儲存設定", use_container_width=True):
             try:
                 parsed, parsed_ratio = read_parameters(rate_inputs, ratio_input)
@@ -83,6 +124,13 @@ def run_app(environment: str) -> None:
                 st.error("設定必須是 0 到 1 的有效數字，且儲存目錄必須可寫入。")
 
     uploaded = st.file_uploader("報表上傳區（.xlsx）", type=["xlsx"])
+
+    if member_mode:
+        if uploaded:
+            render_member_commission(uploaded, rate_inputs)
+        else:
+            st.info("請上傳報表，選擇直屬會員帳號以計算單一會員佣金。")
+        return
 
     if uploaded:
         try:

@@ -137,3 +137,31 @@ def test_report_computation_still_uses_only_present_games(account, monkeypatch):
     assert at.metric[3].value == "-5.94"
     assert len(at.dataframe[0].value) == 1
     assert at.dataframe[0].value.iloc[0]["遊戲類型"] == "Slots"
+
+
+def test_staging_single_member_selection_and_rate_recalculation(account, monkeypatch):
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "直屬會員"
+    ws.append(["會員帳號", "遊戲分類", "有效投注", "輸贏金額"])
+    ws.append(["Sample_A", "Slots", 100, -10])
+    ws.append(["Sample_B", "Slots", 900, -90])
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.name = "synthetic-members.xlsx"
+    monkeypatch.setattr(app_ui.st, "file_uploader", lambda *a, **k: buf)
+    at = login(app(account, "staging").run())
+    at.radio(key="calculation_mode").set_value("單一會員佣金").run()
+    assert not at.exception
+    assert at.metric[2].value == "2.58"
+    assert len(at.dataframe[0].value) == 1
+    assert not any(t.key == "ratio" for t in at.text_input)
+    at.text_input(key="rate_Slots").set_value("0.03").run()
+    assert at.metric[2].value == "3.00"
+    at.selectbox[0].set_value("sample_b").run()
+    assert at.metric[2].value == "27.00"
+    assert len(at.get("download_button")) == 1
+    assert not any(s.value == "我的歷史報表紀錄" for s in at.subheader)
+    prod = login(app(account).run())
+    assert not prod.exception
+    assert len(prod.radio) == 0
