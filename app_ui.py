@@ -28,21 +28,25 @@ from settlement import (
 BASE_DIR = Path(__file__).parent
 
 
-def table_html(rows: list[dict], label: str) -> str:
-    """Render small result tables without loading the interactive grid bundle."""
+def table_markdown(rows: list[dict]) -> str:
+    """Use native Markdown tables; report data is always literal cell text."""
     if not rows:
         return ""
     columns = list(dict.fromkeys(key for row in rows for key in row))
-    header = "".join(f'<th scope="col">{escape(str(column))}</th>' for column in columns)
-    body = "".join(
-        "<tr>" + "".join(f"<td>{escape(str(row.get(column, '')))}</td>" for column in columns) + "</tr>"
-        for row in rows
-    )
-    return (
-        '<div style="overflow-x:auto">'
-        f'<table aria-label="{escape(label, quote=True)}">'
-        f"<thead><tr>{header}</tr></thead><tbody>{body}</tbody></table></div>"
-    )
+
+    def cell(value):
+        text = str(value).replace("\r\n", " ").replace("\r", " ").replace("\n", " ")
+        # Encode delimiters so filenames cannot become cells, links or HTML.
+        return "".join(f"&#{ord(char)};" if char in "\\|`*_[]<>~$!#{}()" else escape(char) for char in text)
+
+    def row(values):
+        return "| " + " | ".join(cell(value) for value in values) + " |"
+
+    return "\n".join([
+        row(columns),
+        "| " + " | ".join("---" for _ in columns) + " |",
+        *(row(item.get(column, "") for column in columns) for item in rows),
+    ])
 
 
 def dstr(value: Decimal) -> str:
@@ -111,12 +115,12 @@ def render_member_commission(uploaded, rates, ratio_input, *, agent_mode=False, 
         result = calculate(members, chosen, parsed_rates, ratio)
         st.subheader(f"{label} {result['account']} 的佣金明細")
         st.caption(f"來源：{sheet_name}。結算公式：（該帳號輸贏＋總佣金）×目前結算比例。")
-        st.markdown(table_html([
+        st.markdown(table_markdown([
             {"遊戲類型": game, "有效投注": dstr(item["valid_bet"]),
              "輸贏金額（參考）": dstr(item["win_loss"]), "倍率": str(item["rate"]),
              "佣金": str(item["commission"].quantize(Decimal('.01'), rounding=ROUND_HALF_UP))}
             for game,item in result["games"].items()
-        ], f"{label}遊戲佣金明細"), unsafe_allow_html=True)
+        ]))
         c1,c2,c3 = st.columns(3)
         c1.metric(f"{label}有效投注", dstr(result["total_valid_bet"]))
         c2.metric(f"{label}輸贏（參考）", dstr(result["total_win_loss"]))
@@ -147,7 +151,7 @@ def render_member_commission(uploaded, rates, ratio_input, *, agent_mode=False, 
 def run_app(environment: str) -> None:
     st.set_page_config(page_title="Excel 代理結算系統", page_icon="🧾", layout="wide")
     st.title(f"🧾 Excel 代理結算系統｜{ENVIRONMENTS[environment]}")
-    st.caption("版本：mobile-upload-v1")
+    st.caption("版本：mobile-upload-v2")
     if environment == "staging":
         st.warning("🧪 內部測試環境：請使用測試報表，結果不可作為正式付款依據。")
     account = require_login(environment)
@@ -212,7 +216,7 @@ def run_app(environment: str) -> None:
         for game, item in result["games"].items():
             rows.append({"遊戲類型": game, "有效投注": dstr(item["valid_bet"]), "佣金倍率": str(item["rate"]), "佣金": dstr(item["commission"])})
         st.subheader("各遊戲有效投注及佣金明細")
-        st.markdown(table_html(rows, "各遊戲有效投注及佣金明細"), unsafe_allow_html=True)
+        st.markdown(table_markdown(rows))
 
         c1, c2, c3, c4 = st.columns(4)
         c1.metric("總輸贏", dstr(result["total_win_loss"]))
@@ -248,6 +252,6 @@ def run_app(environment: str) -> None:
             st.error("歷史紀錄讀取失敗，請聯絡管理者。")
             st.stop()
     if history:
-        st.markdown(table_html(history, "我的歷史報表紀錄"), unsafe_allow_html=True)
+        st.markdown(table_markdown(history))
     else:
         st.caption("尚無歷史紀錄。")

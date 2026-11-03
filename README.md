@@ -131,7 +131,7 @@ python -m compileall -q authentication.py access.py app_ui.py app.py staging_app
 
 ## 單一會員佣金與結算
 
-此功能已開放於正式 `main/app.py` 與測試 `staging/staging_app.py`。登入後選「單一會員佣金」，上傳報表，再選擇會員帳號。測試分支 `mobile-upload-v1` 使用帳號搜尋欄與點選清單；正式版 `settlement-release-v1` 仍使用下拉選單。
+此功能已開放於正式 `main/app.py` 與測試 `staging/staging_app.py`。登入後選「單一會員佣金」，上傳報表，再選擇會員帳號。正式版 `mobile-upload-v1` 與測試分支 `mobile-upload-v2` 均使用帳號搜尋欄與點選清單。
 
 - 只讀「直屬會員」分頁；依會員帳號、遊戲分類、有效投注、輸贏金額標題定位。
 - 帳號不分大小寫；支援會員帳號欄合併儲存格。沒有明確帳號且不是合併儲存格的遊戲列會報錯，不猜測歸屬。
@@ -206,6 +206,14 @@ Streamlit Community Cloud 需監看 `main`、Main file 為 `app.py`；平台完�
 - `npm run build` 通過：Python 編譯與 109 項測試，涵蓋相容上傳解碼、錯誤拒絕、三種模式、下載及登入工作階段隔離。
 - 已以 Chromium 的 iPhone 尺寸、觸控及 User-Agent 模擬，刻意阻擋 `axios.*.js`：原生上傳可重現檔案卡片的模組錯誤；相容上傳不再請求此模組。這不是實際 iOS Safari 驗證。WebKit 下載被環境網路以 403 阻擋，仍需實機確認，亦尚未確認遠端 Community Cloud 部署完成。
 - 僅發布 `staging`，登入頁版本為 `mobile-upload-v1`；正式 `main` 尚未更新。原有登入與三種結算公式保持原功能。
+
+## 表格顯示修正：mobile-upload-v2（測試分支）
+
+修正正式站截圖中表格 HTML 原始碼被當成文字顯示的問題：整體代理、單一會員、單一下線代理與歷史紀錄改用原生 Markdown 表格，不再將 HTML 傳給 Markdown，也不開啟 `unsafe_allow_html`。沿用既有 Markdown 元件，沒有增加互動表格或 HTML 元件的動態載入依賴。
+
+- 欄名與儲存格內容皆視為純文字。檔名中的 HTML、連結、圖片、數學或 Markdown 符號會編碼；分隔符與換行不會產生額外欄列。計算公式、Decimal 精度、登入、手機相容上傳及 Excel 匯出保持原功能。
+- `npm run build` 通過 Python 編譯與 112 項測試。Chromium 電腦及手機尺寸的瀏覽器檢查確認三種模式與歷史呈現真正的表格欄列，顯示金額正確、可重算及下載。另用含 `|` 與 HTML 的合成檔名驗證歷史仍維持欄數，未產生圖片或腳本元素。手機為 Chromium 模擬，非實際 Safari 引擎。
+- 本次僅推送 `staging`，版本為 `mobile-upload-v2`；正式 `main` 已於前次核准發布 `mobile-upload-v1`，尚未套用這次表格顯示修正。需要使用者同意本次發布後才能更新正式站，Community Cloud 的實際更新完成狀態仍須另行確認。
 
 ## Google 登入與申請審核（測試站開發中）
 
