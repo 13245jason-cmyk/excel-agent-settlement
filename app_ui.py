@@ -54,7 +54,7 @@ def read_parameters(rate_inputs: dict, ratio_input: str):
     return rates, ratio
 
 
-def render_member_commission(uploaded, rates, ratio_input, *, agent_mode=False):
+def render_member_commission(uploaded, rates, ratio_input, *, agent_mode=False, environment="staging"):
     label = "代理" if agent_mode else "會員"
     sheet_name = "下線代理" if agent_mode else "直屬會員"
     cache_key = "agent_upload" if agent_mode else "member_upload"
@@ -102,7 +102,7 @@ def render_member_commission(uploaded, rates, ratio_input, *, agent_mode=False):
             st.warning("Sports 目前倍率為 0，佣金為 0；Sports 輸贏仍已計入結算。請確認左側倍率。")
         safe_account = re.sub(r'[^a-zA-Z0-9_.-]', '_', result['account'])[:64]
         st.download_button(f"下載{label}佣金 Excel", exporter(uploaded.name, result),
-                           file_name=f"內部測試_{safe_account}_{label}佣金.xlsx",
+                           file_name=f"{ENVIRONMENTS[environment]}_{safe_account}_{label}佣金.xlsx",
                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
     except (SettlementError, InvalidOperation, ValueError) as exc:
         st.error(str(exc))
@@ -114,16 +114,13 @@ def run_app(environment: str) -> None:
     if environment == "staging":
         st.warning("🧪 內部測試環境：請使用測試報表，結果不可作為正式付款依據。")
     account = require_login(environment)
-    member_mode = False
-    agent_mode = False
-    if environment == "staging":
-        mode = st.radio("計算模式", ["整體代理結算", "單一會員佣金", "單一下線代理佣金"], key="calculation_mode")
-        member_mode = mode != "整體代理結算"
-        agent_mode = mode == "單一下線代理佣金"
+    mode = st.radio("計算模式", ["整體代理結算", "單一會員佣金", "單一下線代理佣金"], key="calculation_mode")
+    member_mode = mode != "整體代理結算"
+    agent_mode = mode == "單一下線代理佣金"
     data_dir = account_data_dir(BASE_DIR, environment, account)
     settings_file = data_dir / "settings.json"
     history_file = data_dir / "history.json"
-    st.caption("版本：sports-ratio-v1｜上傳報表後，系統會從「下線代理」與「直屬會員」分頁加總，並以 Decimal 精準計算。")
+    st.caption("版本：settlement-release-v1｜上傳報表後，系統會從「下線代理」與「直屬會員」分頁加總，並以 Decimal 精準計算。")
 
     try:
         settings = load_settings(settings_file)
@@ -153,7 +150,7 @@ def run_app(environment: str) -> None:
 
     if member_mode:
         if uploaded:
-            render_member_commission(uploaded, rate_inputs, ratio_input, agent_mode=agent_mode)
+            render_member_commission(uploaded, rate_inputs, ratio_input, agent_mode=agent_mode, environment=environment)
         else:
             st.info("請上傳報表，選擇下線代理帳號以計算單一代理佣金。" if agent_mode else "請上傳報表，選擇直屬會員帳號以計算單一會員佣金。")
         return

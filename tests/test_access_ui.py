@@ -139,7 +139,8 @@ def test_report_computation_still_uses_only_present_games(account, monkeypatch):
     assert at.dataframe[0].value.iloc[0]["遊戲類型"] == "Slots"
 
 
-def test_staging_single_member_selection_and_rate_recalculation(account, monkeypatch):
+@pytest.mark.parametrize("environment", ["production", "staging"])
+def test_single_member_selection_and_rate_recalculation(account, monkeypatch, environment):
     wb = Workbook()
     ws = wb.active
     ws.title = "直屬會員"
@@ -150,7 +151,7 @@ def test_staging_single_member_selection_and_rate_recalculation(account, monkeyp
     wb.save(buf)
     buf.name = "synthetic-members.xlsx"
     monkeypatch.setattr(app_ui.st, "file_uploader", lambda *a, **k: buf)
-    at = login(app(account, "staging").run())
+    at = login(app(account, environment).run())
     at.radio(key="calculation_mode").set_value("單一會員佣金").run()
     assert not at.exception
     assert at.metric[2].value == "2.58"
@@ -164,10 +165,11 @@ def test_staging_single_member_selection_and_rate_recalculation(account, monkeyp
     assert not any(s.value == "我的歷史報表紀錄" for s in at.subheader)
     prod = login(app(account).run())
     assert not prod.exception
-    assert len(prod.radio) == 0
+    assert prod.radio(key="calculation_mode").options == ["整體代理結算", "單一會員佣金", "單一下線代理佣金"]
 
 
-def test_staging_agent_mode_switch_and_recalculate(account, monkeypatch):
+@pytest.mark.parametrize("environment", ["production", "staging"])
+def test_agent_mode_switch_and_recalculate(account, monkeypatch, environment):
     wb=Workbook();ws=wb.active;ws.title='下線代理'
     ws.append(['代理帳號','遊戲分類','有效投注','輸贏金額'])
     ws.append(['Sample_A','Slots',100,-10])
@@ -177,7 +179,7 @@ def test_staging_agent_mode_switch_and_recalculate(account, monkeypatch):
     m.append(['Sample_A','Slots',1000,-100])
     buf=io.BytesIO();wb.save(buf);buf.name='synthetic-agents.xlsx'
     monkeypatch.setattr(app_ui.st,'file_uploader',lambda *a,**k:buf)
-    at=login(app(account,'staging').run())
+    at=login(app(account,environment).run())
     at.radio(key='calculation_mode').set_value('單一下線代理佣金').run()
     assert not at.exception
     assert at.selectbox[0].label=='代理帳號'
@@ -195,11 +197,12 @@ def test_staging_agent_mode_switch_and_recalculate(account, monkeypatch):
     assert at.metric[2].value=='3.00'
 
 
-def test_sports_and_ratio_are_editable_in_all_three_modes(account, monkeypatch, tmp_path):
+@pytest.mark.parametrize("environment", ["production", "staging"])
+def test_sports_and_ratio_are_editable_in_all_three_modes(account, monkeypatch, tmp_path, environment):
     from test_sports_settlement import sports_report
     buf=io.BytesIO(sports_report());buf.name='synthetic-sports.xlsx'
     monkeypatch.setattr(app_ui.st,'file_uploader',lambda *a,**k:buf)
-    at=login(app(account,'staging').run())
+    at=login(app(account,environment).run())
     assert at.text_input(key='rate_Sports').value=='0'
     assert any('Sports 目前倍率為 0' in w.value for w in at.warning)
     at.text_input(key='rate_Sports').set_value('0.01')
@@ -213,9 +216,25 @@ def test_sports_and_ratio_are_editable_in_all_three_modes(account, monkeypatch, 
         assert next(m.value for m in at.metric if m.label=='最終結算')=='0.00'
         at.text_input(key='ratio').set_value('0.5').run()
     next(b for b in at.button if b.label=='儲存設定').click().run()
-    stored=load_settings(account_data_dir(tmp_path,'staging',account)/'settings.json')
+    stored=load_settings(account_data_dir(tmp_path,environment,account)/'settings.json')
     assert stored['rates']['Sports']=='0.01' and stored['settlement_ratio']=='0.5'
     at.button(key='logout').click().run()
     login(at)
     assert at.text_input(key='rate_Sports').value=='0.01'
     assert at.text_input(key='ratio').value=='0.5'
+
+
+@pytest.mark.parametrize("environment,prefix", [("production", "正式使用_"), ("staging", "內部測試_")])
+def test_single_account_download_identifies_environment(account, monkeypatch, environment, prefix):
+    from test_sports_settlement import sports_report
+    buf=io.BytesIO(sports_report());buf.name='synthetic.xlsx'
+    filenames=[]
+    monkeypatch.setattr(app_ui.st,'file_uploader',lambda *a,**k:buf)
+    monkeypatch.setattr(app_ui.st,'download_button',lambda *a,**k:filenames.append(k['file_name']))
+    at=login(app(account,environment).run())
+    for mode in ['單一會員佣金','單一下線代理佣金']:
+        at.radio(key='calculation_mode').set_value(mode).run()
+        assert not at.exception
+        assert filenames[-1].startswith(prefix)
+    if environment=='production':
+        assert not any('內部測試環境' in warning.value for warning in at.warning)
