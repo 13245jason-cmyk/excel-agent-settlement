@@ -266,3 +266,34 @@ def test_account_search_and_missing_account_clear_results(account,monkeypatch):
     at.radio(key='calculation_mode').set_value('單一下線代理佣金').run()
     assert len(at.selectbox)==0
     assert next(r for r in at.radio if r.label=='代理帳號').options==['Agent_A']
+
+
+def test_compatible_upload_computes_all_modes_and_logout_clears_file(account, monkeypatch):
+    import base64
+    import mobile_upload
+    from test_sports_settlement import sports_report
+    data = sports_report()
+    value = {"name": "synthetic.xlsx", "size": len(data), "data": base64.b64encode(data).decode()}
+    monkeypatch.setattr(mobile_upload, "_upload_component", lambda **kwargs: value)
+    at = login(app(account, 'staging').run())
+    at.checkbox(key="compatible_upload").check().run()
+    assert not at.exception and len(at.get("file_uploader")) == 0
+    assert next(m.value for m in at.metric if m.label == '最終結算') == '22.19'
+    nonce = at.session_state['compatible_upload_nonce']
+    for mode, amount in [('單一會員佣金', '-51.87'), ('單一下線代理佣金', '-85.94')]:
+        at.radio(key='calculation_mode').set_value(mode).run()
+        assert not at.exception
+        assert next(m.value for m in at.metric if m.label == '最終結算') == amount
+        assert len(at.get('download_button')) == 1
+    value = None
+    at.run()
+    assert len(at.metric) == 0 and len(at.get('download_button')) == 0
+    value = {'name': 'bad.xlsx', 'size': 1, 'data': '!!!'}
+    at.run()
+    assert at.error and len(at.metric) == 0
+    at.button(key='logout').click().run()
+    assert 'compatible_upload_nonce' not in at.session_state
+    assert len(at.metric) == 0
+    login(at)
+    at.checkbox(key="compatible_upload").check().run()
+    assert at.session_state['compatible_upload_nonce'] != nonce

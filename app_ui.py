@@ -68,6 +68,16 @@ def read_parameters(rate_inputs: dict, ratio_input: str):
     return rates, ratio
 
 
+def upload_report():
+    user_agent = st.context.headers.get("User-Agent", "")
+    mobile_default = any(device in user_agent for device in ("iPhone", "iPad", "iPod"))
+    if st.checkbox("手機相容上傳", value=mobile_default, key="compatible_upload"):
+        from mobile_upload import compatible_file_uploader
+        st.caption("iPhone 上傳失敗時可使用此模式，每份報表最多 10 MB。")
+        return compatible_file_uploader()
+    return st.file_uploader("報表上傳區（.xlsx）", type=["xlsx"])
+
+
 def render_member_commission(uploaded, rates, ratio_input, *, agent_mode=False, environment="staging"):
     from member_commission import (parse_member_accounts, calculate_member_commission, export_member_commission,
                                    parse_agent_accounts, calculate_agent_commission, export_agent_commission)
@@ -137,7 +147,7 @@ def render_member_commission(uploaded, rates, ratio_input, *, agent_mode=False, 
 def run_app(environment: str) -> None:
     st.set_page_config(page_title="Excel 代理結算系統", page_icon="🧾", layout="wide")
     st.title(f"🧾 Excel 代理結算系統｜{ENVIRONMENTS[environment]}")
-    st.caption("版本：report-display-v1")
+    st.caption("版本：mobile-upload-v1")
     if environment == "staging":
         st.warning("🧪 內部測試環境：請使用測試報表，結果不可作為正式付款依據。")
     account = require_login(environment)
@@ -173,7 +183,7 @@ def run_app(environment: str) -> None:
             except (InvalidOperation, ValueError, OSError):
                 st.error("設定必須是 0 到 1 的有效數字，且儲存目錄必須可寫入。")
 
-    uploaded = st.file_uploader("報表上傳區（.xlsx）", type=["xlsx"])
+    uploaded = upload_report()
 
     if member_mode:
         if uploaded:

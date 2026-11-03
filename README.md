@@ -131,7 +131,7 @@ python -m compileall -q authentication.py access.py app_ui.py app.py staging_app
 
 ## 單一會員佣金與結算
 
-此功能已開放於正式 `main/app.py` 與測試 `staging/staging_app.py`。登入後選「單一會員佣金」，上傳報表，再選擇會員帳號。測試分支 `report-display-v1` 使用帳號搜尋欄與點選清單；正式版 `settlement-release-v1` 仍使用下拉選單。
+此功能已開放於正式 `main/app.py` 與測試 `staging/staging_app.py`。登入後選「單一會員佣金」，上傳報表，再選擇會員帳號。測試分支 `mobile-upload-v1` 使用帳號搜尋欄與點選清單；正式版 `settlement-release-v1` 仍使用下拉選單。
 
 - 只讀「直屬會員」分頁；依會員帳號、遊戲分類、有效投注、輸贏金額標題定位。
 - 帳號不分大小寫；支援會員帳號欄合併儲存格。沒有明確帳號且不是合併儲存格的遊戲列會報錯，不猜測歸屬。
@@ -195,6 +195,17 @@ Streamlit Community Cloud 需監看 `main`、Main file 為 `app.py`；平台完�
 - `npm run build` 通過：Python 編譯與 94 項測試，包含顯示金額、HTML 跳脫與空表格不補列的回歸檢查。
 - 此改動是減少前端載入依賴的相容修正。使用者尚未提供這次錯誤的完整站台與失敗 JavaScript 網址，不能據此確認遠端上游原因，其他元件或網路失敗仍可能需要另外排查。
 - 僅發布 `staging`，正式 `main` 尚未更新；部署完成後登入頁顯示 `report-display-v1`，實際 Community Cloud 更新狀態仍需確認。
+
+## 手機相容上傳：mobile-upload-v1（測試分支）
+
+針對手機選檔後，檔案卡片顯示 `TypeError: Importing a module script failed` 的情況，新增「手機相容上傳」。iPhone、iPad、iPod 的 User-Agent 預設勾選，其他瀏覽器可手動切換；此辨識只影響介面預設，不影響帳號權限。一般電腦上傳仍使用原生上傳元件。
+
+- 相容元件位於 `components/mobile_upload/index.html`，透過 Streamlit 自訂元件 API v1 傳遞選取檔案。JavaScript 全部內嵌，選檔後使用 FileReader 與現有工作階段連線，不再動態下載 axios 上傳模組。檔案仍傳到伺服器解析，並非純瀏覽器結算。
+- 相容模式每檔最多 10 MB、僅接受 `.xlsx`；瀏覽器與 Python 都檢查格式及大小。後端另檢查編碼完整性、實際位元組大小，並交給既有 Excel 解析器驗證內容。錯誤明確提示，不產生替代結算結果。可移除及重新選檔；顯示檔名使用純文字。
+- 元件只在登入後建立，每次登入使用新的元件識別碼，登出清除元件及報表狀態。程式不將原始檔案存到磁碟，也不在跨使用者的全域快取保存上傳內容。
+- `npm run build` 通過：Python 編譯與 109 項測試，涵蓋相容上傳解碼、錯誤拒絕、三種模式、下載及登入工作階段隔離。
+- 已以 Chromium 的 iPhone 尺寸、觸控及 User-Agent 模擬，刻意阻擋 `axios.*.js`：原生上傳可重現檔案卡片的模組錯誤；相容上傳不再請求此模組。這不是實際 iOS Safari 驗證。WebKit 下載被環境網路以 403 阻擋，仍需實機確認，亦尚未確認遠端 Community Cloud 部署完成。
+- 僅發布 `staging`，登入頁版本為 `mobile-upload-v1`；正式 `main` 尚未更新。原有登入與三種結算公式保持原功能。
 
 ## Google 登入與申請審核（測試站開發中）
 

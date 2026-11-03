@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    :root { color-scheme: light dark; }
+    body { margin: 0; padding: 4px; font: 16px/1.5 system-ui, sans-serif; color: var(--text, #fafafa); background: var(--background, #0e1117); }
+    label { display: block; margin-bottom: 8px; }
+    input { display: block; box-sizing: border-box; width: 100%; min-height: 44px; font: inherit; }
+    button { min-height: 44px; margin-top: 8px; padding: 4px 14px; font: inherit; cursor: pointer; }
+    #status { overflow-wrap: anywhere; margin: 8px 0 0; }
+    #status[data-error="true"] { color: #ff8b8b; }
+  </style>
+</head>
+<body>
+  <label for="report">報表上傳區（.xlsx，最多 10 MB）</label>
+  <input id="report" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" disabled>
+  <button id="clear" type="button" disabled>移除檔案</button>
+  <p id="status" role="status" aria-live="polite">請選擇 Excel 報表。</p>
+  <script>
+    // Streamlit custom component API v1. All code is inline: selecting a file
+    // never imports a module or downloads a third-party upload library.
+    const input = document.getElementById('report');
+    const clear = document.getElementById('clear');
+    const status = document.getElementById('status');
+    let maxBytes = 10 * 1024 * 1024;
+    let reader = null;
+    let generation = 0;
+    let disabled = true;
+    function send(type, fields) {
+      window.parent.postMessage(Object.assign({isStreamlitMessage: true, type: type}, fields), window.location.origin);
+    }
+    function resize() {
+      send('streamlit:setFrameHeight', {height: Math.ceil(document.body.getBoundingClientRect().height) + 8});
+    }
+    function setValue(value) {
+      send('streamlit:setComponentValue', {value: value, dataType: 'json'});
+    }
+    function show(message, error) {
+      status.textContent = message;
+      status.dataset.error = error ? 'true' : 'false';
+      resize();
+    }
+    function cancelRead() {
+      generation += 1;
+      if (reader && reader.readyState === FileReader.LOADING) reader.abort();
+      reader = null;
+    }
+    clear.addEventListener('click', function () {
+      if (disabled) return;
+      cancelRead();
+      input.value = '';
+      setValue(null);
+      show('請選擇 Excel 報表。', false);
+    });
+    input.addEventListener('change', function () {
+      if (disabled) return;
+      cancelRead();
+      setValue(null);
+      const file = input.files && input.files[0];
+      if (!file) { show('請選擇 Excel 報表。', false); return; }
+      if (!/\.xlsx$/i.test(file.name)) { show('請選擇 .xlsx 格式的報表。', true); return; }
+      if (file.size === 0 || file.size > maxBytes) { show('報表不可為空白，且不得超過 10 MB。', true); return; }
+      const current = generation;
+      reader = new FileReader();
+      reader.onerror = function () {
+        if (current === generation) show('無法讀取檔案，請從「檔案」App 重新選取。', true);
+      };
+      reader.onload = function () {
+        if (current !== generation || disabled) return;
+        const result = String(reader.result);
+        setValue({name: file.name, size: file.size, data: result.slice(result.indexOf(',') + 1)});
+        show('已送出：' + file.name + '。結算結果會顯示在下方。', false);
+      };
+      show('正在讀取：' + file.name, false);
+      reader.readAsDataURL(file);
+    });
+    window.addEventListener('message', function (event) {
+      if (event.source !== window.parent || event.origin !== window.location.origin || !event.data || event.data.type !== 'streamlit:render') return;
+      const data = event.data;
+      disabled = Boolean(data.disabled);
+      input.disabled = disabled;
+      clear.disabled = disabled;
+      if (data.args && Number.isFinite(data.args.max_bytes)) maxBytes = data.args.max_bytes;
+      if (data.theme) {
+        document.documentElement.style.setProperty('--text', data.theme.textColor);
+        document.documentElement.style.setProperty('--background', data.theme.backgroundColor);
+      }
+      resize();
+    });
+    if (window.ResizeObserver) new ResizeObserver(resize).observe(document.body);
+    send('streamlit:componentReady', {apiVersion: 1});
+    resize();
+  </script>
+</body>
+</html>
