@@ -168,3 +168,9 @@ python -m compileall -q authentication.py access.py app_ui.py app.py staging_app
 登入設定、帳號權限與 `data/production/`、`data/staging/` 隔離方式不變，不會把測試站帳號或測試資料搬到正式站。正式站首次新增的 Sports 預設倍率為 0，請在左側確認正確倍率與比例後儲存。
 
 Streamlit Community Cloud 需監看 `main`、Main file 為 `app.py`；平台完成自動更新後，登入可見版本 `settlement-release-v1`。若仍是舊版本，可在 Community Cloud 管理頁確認最新提交並重新啟動 App。正式站必須保留 `deployment.environment = "production"` 的 Secrets。
+
+## Google 登入與申請審核（測試站開發中）
+
+新增獨立授權管理入口 `approval_app.py`、Google 原生 OIDC 登入、使用申請／管理者核准／拒絕／停用、PostgreSQL 持久審核與操作紀錄。僅發布 `staging`，不改正式站目前的密碼登入。未切換 Secrets 前，測試站也保留現有帳密功能。
+
+詳細設定與尚需外部驗證事項見 [GOOGLE_AUTH_SETUP.md](GOOGLE_AUTH_SETUP.md)。之後每次需求均先測試站完成，取得使用者對該次發布的明確同意後才更新 `main`；此流程也記錄於 `AGENTS.md`。
