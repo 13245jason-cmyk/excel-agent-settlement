@@ -165,3 +165,31 @@ def test_staging_single_member_selection_and_rate_recalculation(account, monkeyp
     prod = login(app(account).run())
     assert not prod.exception
     assert len(prod.radio) == 0
+
+
+def test_staging_agent_mode_switch_and_recalculate(account, monkeypatch):
+    wb=Workbook();ws=wb.active;ws.title='下線代理'
+    ws.append(['代理帳號','遊戲分類','有效投注','輸贏金額'])
+    ws.append(['Sample_A','Slots',100,-10])
+    ws.append(['Sample_B','Slots',900,-90])
+    m=wb.create_sheet('直屬會員')
+    m.append(['會員帳號','遊戲分類','有效投注','輸贏金額'])
+    m.append(['Sample_A','Slots',1000,-100])
+    buf=io.BytesIO();wb.save(buf);buf.name='synthetic-agents.xlsx'
+    monkeypatch.setattr(app_ui.st,'file_uploader',lambda *a,**k:buf)
+    at=login(app(account,'staging').run())
+    at.radio(key='calculation_mode').set_value('單一下線代理佣金').run()
+    assert not at.exception
+    assert at.selectbox[0].label=='代理帳號'
+    assert at.metric[2].label=='代理總佣金'
+    assert at.metric[2].value=='2.58'
+    at.selectbox[0].set_value('sample_b').run()
+    assert at.metric[2].value=='23.22'
+    at.text_input(key='rate_Slots').set_value('0.03').run()
+    assert at.metric[2].value=='27.00'
+    at.radio(key='calculation_mode').set_value('單一會員佣金').run()
+    assert at.selectbox[0].label=='會員帳號'
+    assert at.metric[2].value=='30.00'
+    at.radio(key='calculation_mode').set_value('單一下線代理佣金').run()
+    assert at.metric[2].label=='代理總佣金'
+    assert at.metric[2].value=='3.00'

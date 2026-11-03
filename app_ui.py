@@ -7,7 +7,8 @@ import hashlib
 import json
 import re
 
-from member_commission import parse_member_accounts, calculate_member_commission, export_member_commission
+from member_commission import (parse_member_accounts, calculate_member_commission, export_member_commission,
+                               parse_agent_accounts, calculate_agent_commission, export_agent_commission)
 
 from access import account_data_dir, require_login
 from authentication import ENVIRONMENTS
@@ -52,20 +53,26 @@ def read_parameters(rate_inputs: dict, ratio_input: str):
     return rates, ratio
 
 
-def render_member_commission(uploaded, rates):
+def render_member_commission(uploaded, rates, *, agent_mode=False):
+    label = "代理" if agent_mode else "會員"
+    sheet_name = "下線代理" if agent_mode else "直屬會員"
+    cache_key = "agent_upload" if agent_mode else "member_upload"
+    parser = parse_agent_accounts if agent_mode else parse_member_accounts
+    calculate = calculate_agent_commission if agent_mode else calculate_member_commission
+    exporter = export_agent_commission if agent_mode else export_member_commission
     try:
         data = uploaded.getvalue()
         digest = hashlib.sha256(data).hexdigest()
-        cached = st.session_state.get("member_upload")
+        cached = st.session_state.get(cache_key)
         if cached is None or cached["digest"] != digest:
-            cached = {"digest": digest, "members": parse_member_accounts(io.BytesIO(data))}
-            st.session_state.member_upload = cached
+            cached = {"digest": digest, "members": parser(io.BytesIO(data))}
+            st.session_state[cache_key] = cached
         members = cached["members"]
-        chosen = st.selectbox("會員帳號", options=list(members),
-                              format_func=lambda key: members[key]["account"], key=f"member_account_{digest}")
-        result = calculate_member_commission(members, chosen, rates)
-        st.subheader(f"會員 {result['account']} 的佣金明細")
-        st.caption("來源：直屬會員。依目前佣金倍率計算；結算比例僅用於整體代理結算。")
+        chosen = st.selectbox(f"{label}帳號", options=list(members),
+                              format_func=lambda key: members[key]["account"], key=f"{cache_key}_account_{digest}")
+        result = calculate(members, chosen, rates)
+        st.subheader(f"{label} {result['account']} 的佣金明細")
+        st.caption(f"來源：{sheet_name}。依目前佣金倍率計算；結算比例僅用於整體代理結算。")
         st.dataframe(pd.DataFrame([
             {"遊戲類型": game, "有效投注": dstr(item["valid_bet"]),
              "輸贏金額（參考）": dstr(item["win_loss"]), "倍率": str(item["rate"]),
@@ -73,13 +80,13 @@ def render_member_commission(uploaded, rates):
             for game,item in result["games"].items()
         ]), hide_index=True, use_container_width=True)
         c1,c2,c3 = st.columns(3)
-        c1.metric("會員有效投注", dstr(result["total_valid_bet"]))
-        c2.metric("會員輸贏（參考）", dstr(result["total_win_loss"]))
-        c3.metric("會員總佣金", format(result["total_commission"].quantize(Decimal('.01'), rounding=ROUND_HALF_UP), ',.2f'))
+        c1.metric(f"{label}有效投注", dstr(result["total_valid_bet"]))
+        c2.metric(f"{label}輸贏（參考）", dstr(result["total_win_loss"]))
+        c3.metric(f"{label}總佣金", format(result["total_commission"].quantize(Decimal('.01'), rounding=ROUND_HALF_UP), ',.2f'))
         st.caption(f"未捨入佣金：{result['total_commission']}。過程保留精度，顯示採四捨五入至兩位。")
         safe_account = re.sub(r'[^a-zA-Z0-9_.-]', '_', result['account'])[:64]
-        st.download_button("下載會員佣金 Excel", export_member_commission(uploaded.name, result),
-                           file_name=f"內部測試_{safe_account}_會員佣金.xlsx",
+        st.download_button(f"下載{label}佣金 Excel", exporter(uploaded.name, result),
+                           file_name=f"內部測試_{safe_account}_{label}佣金.xlsx",
                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
     except (SettlementError, InvalidOperation, ValueError) as exc:
         st.error(str(exc))
@@ -92,8 +99,11 @@ def run_app(environment: str) -> None:
         st.warning("🧪 內部測試環境：請使用測試報表，結果不可作為正式付款依據。")
     account = require_login(environment)
     member_mode = False
+    agent_mode = False
     if environment == "staging":
-        member_mode = st.radio("計算模式", ["整體代理結算", "單一會員佣金"], key="calculation_mode") == "單一會員佣金"
+        mode = st.radio("計算模式", ["整體代理結算", "單一會員佣金", "單一下線代理佣金"], key="calculation_mode")
+        member_mode = mode != "整體代理結算"
+        agent_mode = mode == "單一下線代理佣金"
     data_dir = account_data_dir(BASE_DIR, environment, account)
     settings_file = data_dir / "settings.json"
     history_file = data_dir / "history.json"
@@ -127,9 +137,9 @@ def run_app(environment: str) -> None:
 
     if member_mode:
         if uploaded:
-            render_member_commission(uploaded, rate_inputs)
+            render_member_commission(uploaded, rate_inputs, agent_mode=agent_mode)
         else:
-            st.info("請上傳報表，選擇直屬會員帳號以計算單一會員佣金。")
+            st.info("請上傳報表，選擇下線代理帳號以計算單一代理佣金。" if agent_mode else "請上傳報表，選擇直屬會員帳號以計算單一會員佣金。")
         return
 
     if uploaded:
