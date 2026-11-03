@@ -6,7 +6,7 @@ from decimal import Decimal, InvalidOperation, localcontext
 from io import BytesIO
 
 from openpyxl import Workbook, load_workbook
-from settlement import SettlementError, _game
+from settlement import SettlementError, _game, DEFAULT_SETTLEMENT_RATIO
 
 
 def norm(value):
@@ -85,10 +85,13 @@ def parse_member_accounts(source, *, sheet_name="直屬會員", account_label="�
         wb.close()
 
 
-def calculate_member_commission(members, account, rates, *, account_label="會員"):
+def calculate_member_commission(members, account, rates, ratio=DEFAULT_SETTLEMENT_RATIO, *, account_label="會員"):
     member = members.get(account.strip().casefold())
     if member is None:
         raise SettlementError(f"找不到所選{account_label}帳號")
+    ratio = amount(ratio, "結算比例")
+    if not 0 <= ratio <= 1:
+        raise SettlementError("結算比例必須介於 0 與 1")
     with localcontext() as context:
         context.prec = 80
         games = {}
@@ -109,10 +112,16 @@ def calculate_member_commission(members, account, rates, *, account_label="會�
                 raise SettlementError(f'{game} 倍率必須介於 0 與 1')
             item['rate'] = rate
             item['commission'] = item['valid_bet'] * rate
-        return {'account': member['account'], 'source_sheet': member.get('source_sheet', '直屬會員'), 'account_label': account_label, 'games': games,
+        total_commission = sum((g['commission'] for g in games.values()), Decimal(0))
+        total_win_loss = sum((g['win_loss'] for g in games.values()), Decimal(0))
+        net = total_win_loss + total_commission
+        final = net * ratio
+        return {'account': member['account'], 'source_sheet': member.get('source_sheet', '直屬會員'),
+                'account_label': account_label, 'games': games,
                 'total_valid_bet': sum((g['valid_bet'] for g in games.values()), Decimal(0)),
-                'total_win_loss': sum((g['win_loss'] for g in games.values()), Decimal(0)),
-                'total_commission': sum((g['commission'] for g in games.values()), Decimal(0))}
+                'total_win_loss': total_win_loss, 'total_commission': total_commission,
+                'net_settlement': net, 'settlement_ratio': ratio, 'final_settlement': final,
+                'direction': f'{account_label}需交上線' if final < 0 else f'上線需給{account_label}' if final > 0 else '雙方無需付款'}
 
 
 def export_member_commission(filename, result):
@@ -120,7 +129,7 @@ def export_member_commission(filename, result):
     ws = wb.active
     label = result.get('account_label', '會員')
     ws.title = f'{label}佣金'
-    ws.append(['計算類型', f'單一{label}佣金（未套用代理結算比例）'])
+    ws.append(['計算類型', f'單一{label}佣金與結算'])
     ws.append(['來源工作表', result.get('source_sheet', '直屬會員')])
     ws.append(['原始報表', filename])
     ws.append([f'{label}帳號', result['account']])
@@ -131,6 +140,12 @@ def export_member_commission(filename, result):
     ws.append(['輸贏合計（參考）', str(result['total_win_loss'])])
     ws.append(['總佣金（未捨入）', str(result['total_commission'])])
     ws.append(['總佣金（顯示）', str(result['total_commission'].quantize(Decimal('.01'), rounding='ROUND_HALF_UP'))])
+    ws.append(['結算淨額', str(result['net_settlement'])])
+    ws.append(['結算比例', str(result['settlement_ratio'])])
+    ws.append(['最終結算（未捨入）', str(result['final_settlement'])])
+    ws.append(['付款方向', result['direction']])
+    ws.append(['最終應付金額', str(abs(result['final_settlement']).quantize(Decimal('.01'), rounding='ROUND_HALF_UP'))])
+    ws.append(['計算公式', f"({result['total_win_loss']} + {result['total_commission']}) × {result['settlement_ratio']} = {result['final_settlement']}"])
     for row in ws:
         for cell in row:
             if isinstance(cell.value, str):
@@ -146,8 +161,8 @@ def parse_agent_accounts(source):
     return parse_member_accounts(source, sheet_name="下線代理", account_label="代理")
 
 
-def calculate_agent_commission(agents, account, rates):
-    return calculate_member_commission(agents, account, rates, account_label="代理")
+def calculate_agent_commission(agents, account, rates, ratio=DEFAULT_SETTLEMENT_RATIO):
+    return calculate_member_commission(agents, account, rates, ratio, account_label="代理")
 
 
 def export_agent_commission(filename, result):

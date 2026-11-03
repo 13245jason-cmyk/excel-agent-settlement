@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timezone
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal, InvalidOperation, localcontext, ROUND_HALF_UP
 from io import BytesIO
 from pathlib import Path
 from typing import BinaryIO
@@ -10,7 +10,7 @@ from typing import BinaryIO
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Font
 
-DEFAULT_RATES = {"Slots": Decimal("0.0258"), "MiniGame": Decimal("0.0258"), "Casino1": Decimal("0.011"), "Casino2": Decimal("0.007")}
+DEFAULT_RATES = {"Slots": Decimal("0.0258"), "MiniGame": Decimal("0.0258"), "Casino1": Decimal("0.011"), "Casino2": Decimal("0.007"), "Sports": Decimal("0")}
 DEFAULT_SETTLEMENT_RATIO = Decimal("0.8")
 GAMES = tuple(DEFAULT_RATES)
 
@@ -34,7 +34,7 @@ def _decimal(value: object, label: str) -> Decimal:
 
 def _game(value: object) -> str | None:
     key = _norm(value)
-    aliases = {"slots": "Slots", "minigame": "MiniGame", "livecasino1": "Casino1", "casino1": "Casino1", "livecasino2": "Casino2", "casino2": "Casino2"}
+    aliases = {"slots": "Slots", "minigame": "MiniGame", "livecasino1": "Casino1", "casino1": "Casino1", "livecasino2": "Casino2", "casino2": "Casino2", "sports": "Sports"}
     return aliases.get(key)
 
 
@@ -84,17 +84,21 @@ def parse_report(source: str | Path | BinaryIO) -> dict:
 
 
 def calculate_settlement(report: dict, rates: dict[str, Decimal], ratio: Decimal) -> dict:
-    games = {}
-    total_commission = Decimal("0")
-    for game, source in report["games"].items():
-        if game not in rates:
-            raise SettlementError(f"報表中的遊戲類型「{game}」沒有對應佣金倍率設定。")
-        rate = rates[game]
-        commission = source["valid_bet"] * rate
-        games[game] = {**source, "rate": rate, "commission": commission}
-        total_commission += commission
-    net = report["total_win_loss"] + total_commission
-    return {"games": games, "total_win_loss": report["total_win_loss"], "total_commission": total_commission, "net_settlement": net, "settlement_ratio": ratio, "final_settlement": net * ratio}
+    if not ratio.is_finite() or not 0 <= ratio <= 1:
+        raise SettlementError("結算比例必須是 0 到 1 之間的有限數字。")
+    with localcontext() as context:
+        context.prec = 80
+        games = {}
+        total_commission = Decimal("0")
+        for game, source in report["games"].items():
+            if game not in rates:
+                raise SettlementError(f"報表中的遊戲類型「{game}」沒有對應佣金倍率設定。")
+            rate = rates[game]
+            commission = source["valid_bet"] * rate
+            games[game] = {**source, "rate": rate, "commission": commission}
+            total_commission += commission
+        net = report["total_win_loss"] + total_commission
+        return {"games": games, "total_win_loss": report["total_win_loss"], "total_commission": total_commission, "net_settlement": net, "settlement_ratio": ratio, "final_settlement": net * ratio}
 
 
 def _json_default(value):
@@ -106,7 +110,7 @@ def load_settings(path: Path) -> dict:
         return {"rates": {k: str(v) for k, v in DEFAULT_RATES.items()}, "settlement_ratio": str(DEFAULT_SETTLEMENT_RATIO)}
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
-        return {"rates": {k: str(data["rates"][k]) for k in GAMES}, "settlement_ratio": str(data["settlement_ratio"])}
+        return {"rates": {k: str(data["rates"].get(k, DEFAULT_RATES[k]) if k == "Sports" else data["rates"][k]) for k in GAMES}, "settlement_ratio": str(data["settlement_ratio"])}
     except (OSError, KeyError, TypeError, json.JSONDecodeError) as exc:
         raise SettlementError(f"設定檔格式錯誤：{exc}")
 
@@ -131,15 +135,20 @@ def export_result_xlsx(report: dict, result: dict) -> bytes:
     for cell in ws[1]:
         cell.font = Font(bold=True)
     for game, item in result["games"].items():
-        ws.append([game, float(item["valid_bet"]), str(item["rate"]), float(item["commission"])])
+        ws.append([game, str(item["valid_bet"]), str(item["rate"]), str(item["commission"])])
     ws.append([])
-    ws.append(["總輸贏", float(result["total_win_loss"])])
-    ws.append(["總佣金", float(result["total_commission"])])
-    ws.append(["結算淨額", float(result["net_settlement"])])
+    ws.append(["總輸贏", str(result["total_win_loss"])])
+    ws.append(["總佣金", str(result["total_commission"])])
+    ws.append(["結算淨額", str(result["net_settlement"])])
     ws.append(["結算比例", str(result["settlement_ratio"])])
-    ws.append(["最終結算", float(result["final_settlement"])])
+    ws.append(["最終結算", str(result["final_settlement"])])
     direction = "代理需交上線" if result["final_settlement"] < 0 else "上線需給代理" if result["final_settlement"] > 0 else "雙方無需付款"
     ws.append(["結算方向", direction])
+    ws.append(["最終應付金額", str(abs(result["final_settlement"]).quantize(Decimal(".01"), rounding=ROUND_HALF_UP))])
+    for row in ws:
+        for cell in row:
+            if isinstance(cell.value, str):
+                cell.data_type = "s"
     for column in ("B", "D"):
         for cell in ws[column][1:]:
             cell.number_format = '#,##0.00'

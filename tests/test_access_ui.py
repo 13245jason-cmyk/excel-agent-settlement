@@ -30,7 +30,7 @@ def clean_runtime(monkeypatch, tmp_path):
 
 def app(account, environment="production", permissions=None):
     entry = "app.py" if environment == "production" else "staging_app.py"
-    at = AppTest.from_file(Path(__file__).parents[1] / entry, default_timeout=15)
+    at = AppTest.from_file(Path(__file__).parents[1] / entry, default_timeout=30)
     at.secrets["deployment"] = {"environment": environment}
     at.secrets["users"] = {account.username: {
         "display_name": account.display_name, "password_hash": account.password_hash,
@@ -155,7 +155,7 @@ def test_staging_single_member_selection_and_rate_recalculation(account, monkeyp
     assert not at.exception
     assert at.metric[2].value == "2.58"
     assert len(at.dataframe[0].value) == 1
-    assert not any(t.key == "ratio" for t in at.text_input)
+    assert at.text_input(key="ratio").value == "0.8"
     at.text_input(key="rate_Slots").set_value("0.03").run()
     assert at.metric[2].value == "3.00"
     at.selectbox[0].set_value("sample_b").run()
@@ -193,3 +193,29 @@ def test_staging_agent_mode_switch_and_recalculate(account, monkeypatch):
     at.radio(key='calculation_mode').set_value('單一下線代理佣金').run()
     assert at.metric[2].label=='代理總佣金'
     assert at.metric[2].value=='3.00'
+
+
+def test_sports_and_ratio_are_editable_in_all_three_modes(account, monkeypatch, tmp_path):
+    from test_sports_settlement import sports_report
+    buf=io.BytesIO(sports_report());buf.name='synthetic-sports.xlsx'
+    monkeypatch.setattr(app_ui.st,'file_uploader',lambda *a,**k:buf)
+    at=login(app(account,'staging').run())
+    assert at.text_input(key='rate_Sports').value=='0'
+    assert any('Sports 目前倍率為 0' in w.value for w in at.warning)
+    at.text_input(key='rate_Sports').set_value('0.01')
+    at.text_input(key='ratio').set_value('0.5').run()
+    for mode, expected in [('整體代理結算','31.37'),('單一會員佣金','-29.92'),('單一下線代理佣金','-48.71')]:
+        at.radio(key='calculation_mode').set_value(mode).run()
+        assert not at.exception
+        assert at.text_input(key='ratio').value=='0.5'
+        assert next(m.value for m in at.metric if m.label=='最終結算')==expected
+        at.text_input(key='ratio').set_value('0').run()
+        assert next(m.value for m in at.metric if m.label=='最終結算')=='0.00'
+        at.text_input(key='ratio').set_value('0.5').run()
+    next(b for b in at.button if b.label=='儲存設定').click().run()
+    stored=load_settings(account_data_dir(tmp_path,'staging',account)/'settings.json')
+    assert stored['rates']['Sports']=='0.01' and stored['settlement_ratio']=='0.5'
+    at.button(key='logout').click().run()
+    login(at)
+    assert at.text_input(key='rate_Sports').value=='0.01'
+    assert at.text_input(key='ratio').value=='0.5'

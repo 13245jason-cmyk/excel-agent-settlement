@@ -32,7 +32,8 @@ BASE_DIR = Path(__file__).parent
 
 
 def dstr(value: Decimal) -> str:
-    return format(value, ",.2f")
+    rounded = value.quantize(Decimal(".01"), rounding=ROUND_HALF_UP)
+    return format(abs(rounded) if rounded == 0 else rounded, ",.2f")
 
 
 def parse_uploaded_report(file_bytes: bytes) -> dict:
@@ -53,7 +54,7 @@ def read_parameters(rate_inputs: dict, ratio_input: str):
     return rates, ratio
 
 
-def render_member_commission(uploaded, rates, *, agent_mode=False):
+def render_member_commission(uploaded, rates, ratio_input, *, agent_mode=False):
     label = "代理" if agent_mode else "會員"
     sheet_name = "下線代理" if agent_mode else "直屬會員"
     cache_key = "agent_upload" if agent_mode else "member_upload"
@@ -70,9 +71,10 @@ def render_member_commission(uploaded, rates, *, agent_mode=False):
         members = cached["members"]
         chosen = st.selectbox(f"{label}帳號", options=list(members),
                               format_func=lambda key: members[key]["account"], key=f"{cache_key}_account_{digest}")
-        result = calculate(members, chosen, rates)
+        parsed_rates, ratio = read_parameters(rates, ratio_input)
+        result = calculate(members, chosen, parsed_rates, ratio)
         st.subheader(f"{label} {result['account']} 的佣金明細")
-        st.caption(f"來源：{sheet_name}。依目前佣金倍率計算；結算比例僅用於整體代理結算。")
+        st.caption(f"來源：{sheet_name}。結算公式：（該帳號輸贏＋總佣金）×目前結算比例。")
         st.dataframe(pd.DataFrame([
             {"遊戲類型": game, "有效投注": dstr(item["valid_bet"]),
              "輸贏金額（參考）": dstr(item["win_loss"]), "倍率": str(item["rate"]),
@@ -84,6 +86,20 @@ def render_member_commission(uploaded, rates, *, agent_mode=False):
         c2.metric(f"{label}輸贏（參考）", dstr(result["total_win_loss"]))
         c3.metric(f"{label}總佣金", format(result["total_commission"].quantize(Decimal('.01'), rounding=ROUND_HALF_UP), ',.2f'))
         st.caption(f"未捨入佣金：{result['total_commission']}。過程保留精度，顯示採四捨五入至兩位。")
+        c4,c5,c6 = st.columns(3)
+        c4.metric("結算淨額", dstr(result["net_settlement"]))
+        c5.metric("結算比例", str(result["settlement_ratio"]))
+        c6.metric("最終結算", dstr(result["final_settlement"]))
+        final = result["final_settlement"]
+        if final < 0:
+            st.error(f"{result['direction']}：{dstr(abs(final))}")
+        elif final > 0:
+            st.success(f"{result['direction']}：{dstr(final)}")
+        else:
+            st.info(result['direction'])
+        st.caption(f"（{result['total_win_loss']} + {result['total_commission']}）× {result['settlement_ratio']} = {result['final_settlement']}")
+        if "Sports" in result["games"] and result["games"]["Sports"]["rate"] == 0:
+            st.warning("Sports 目前倍率為 0，佣金為 0；Sports 輸贏仍已計入結算。請確認左側倍率。")
         safe_account = re.sub(r'[^a-zA-Z0-9_.-]', '_', result['account'])[:64]
         st.download_button(f"下載{label}佣金 Excel", exporter(uploaded.name, result),
                            file_name=f"內部測試_{safe_account}_{label}佣金.xlsx",
@@ -107,7 +123,7 @@ def run_app(environment: str) -> None:
     data_dir = account_data_dir(BASE_DIR, environment, account)
     settings_file = data_dir / "settings.json"
     history_file = data_dir / "history.json"
-    st.caption("版本：source-sheets-v2｜上傳報表後，系統會從「下線代理」與「直屬會員」分頁加總，並以 Decimal 精準計算。")
+    st.caption("版本：sports-ratio-v1｜上傳報表後，系統會從「下線代理」與「直屬會員」分頁加總，並以 Decimal 精準計算。")
 
     try:
         settings = load_settings(settings_file)
@@ -122,9 +138,9 @@ def run_app(environment: str) -> None:
                 f"{game} 倍率", value=str(settings["rates"].get(game, DEFAULT_RATES[game])), key=f"rate_{game}"
             )
         ratio_input = str(settings.get("settlement_ratio", DEFAULT_SETTLEMENT_RATIO))
-        if not member_mode:
-            st.header("結算比例設定")
-            ratio_input = st.text_input("結算比例", value=ratio_input, key="ratio")
+        st.header("結算比例設定")
+        ratio_input = st.text_input("結算比例", value=ratio_input, key="ratio")
+        st.caption("三種計算模式共用目前結算比例，預設 0.8。Sports 預設倍率為 0，可自行設定。")
         if st.button("儲存設定", use_container_width=True):
             try:
                 parsed, parsed_ratio = read_parameters(rate_inputs, ratio_input)
@@ -137,7 +153,7 @@ def run_app(environment: str) -> None:
 
     if member_mode:
         if uploaded:
-            render_member_commission(uploaded, rate_inputs, agent_mode=agent_mode)
+            render_member_commission(uploaded, rate_inputs, ratio_input, agent_mode=agent_mode)
         else:
             st.info("請上傳報表，選擇下線代理帳號以計算單一代理佣金。" if agent_mode else "請上傳報表，選擇直屬會員帳號以計算單一會員佣金。")
         return
@@ -147,6 +163,8 @@ def run_app(environment: str) -> None:
             report = parse_uploaded_report(uploaded.getvalue())
             rates, ratio = read_parameters(rate_inputs, ratio_input)
             result = calculate_settlement(report, rates, ratio)
+            if "Sports" in result["games"] and result["games"]["Sports"]["rate"] == 0:
+                st.warning("Sports 目前倍率為 0，佣金為 0；Sports 輸贏仍已計入結算。請確認左側倍率。")
         except (SettlementError, InvalidOperation, ValueError) as exc:
             st.error(str(exc))
             st.stop()
