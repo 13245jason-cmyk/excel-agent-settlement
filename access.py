@@ -37,6 +37,17 @@ def session_watchdog(environment: str) -> None:
 
 def require_login(environment: str) -> Account:
     try:
+        method = st.secrets.get("access", {}).get("login_method", "password")
+    except FileNotFoundError:
+        method = "password"
+    if method == "google":
+        from google_access import require_google_access
+        return require_google_access(environment)
+    if method != "password":
+        clear_session()
+        st.error("登入方式設定錯誤，報表功能已鎖定。")
+        st.stop()
+    try:
         config = st.secrets.to_dict()
         accounts = read_accounts(config, environment)
     except (AuthConfigurationError, FileNotFoundError) as exc:

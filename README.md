@@ -1,6 +1,8 @@
 # Excel 代理結算系統（登入制）
 
-Python + Streamlit + openpyxl + Decimal。採管理者預先建立帳號、不開放註冊，正式使用與內部測試是兩個獨立 Streamlit Community Cloud App。
+Python + Streamlit + openpyxl + Decimal。支援 Google 登入後申請審核，以及管理者預先建立的帳密登入。正式使用與內部測試是兩個獨立 Streamlit Community Cloud App。
+
+目前程式版本為 `google-access-v4`。Google 正式啟用請依 [GOOGLE_PRODUCTION_SETUP.md](GOOGLE_PRODUCTION_SETUP.md) 新增正式回呼及儲存正式 Secrets；設定尚未切換前沿用原有帳密。內部測試設定見 [GOOGLE_AUTH_SETUP.md](GOOGLE_AUTH_SETUP.md)。
 
 ## 兩個環境
 
@@ -11,7 +13,7 @@ Python + Streamlit + openpyxl + Decimal。採管理者預先建立帳號、不�
 
 兩站必須分別設定 Secrets。測試站有醒目的「內部測試」標示，下載檔名包含環境名稱。不要以網址參數切換環境；程式入口與 Secrets 的 environment 必須一致，否則鎖定功能。
 
-## 第一次啟用登入（必要）
+## 帳密模式首次設定
 
 更新後，尚未設定帳號的站台只會顯示「登入服務尚未設定完成」，不允許上傳、查看歷史或下載報表。沒有預設帳號或預設密碼，也沒有登入繞過模式。
 
@@ -115,7 +117,7 @@ streamlit run staging_app.py --server.port 8502
 
 ```bash
 python -m pytest -q
-python -m compileall -q authentication.py access.py app_ui.py app.py staging_app.py mobile_upload.py settlement.py member_commission.py tools
+python -m compileall -q authentication.py access.py app_ui.py app.py staging_app.py mobile_upload.py settlement.py member_commission.py approvals.py approval_ui.py google_access.py runtime_database.py display_tables.py tools
 ```
 
 測試包括既有結算、密碼雜湊與驗證、缺少設定時鎖定、未登入不得存取報表、錯誤帳密與錯誤環境、嘗試次數限制、登入逾時／帳號停用／密碼更換、登出清除資料、每帳號與環境資料隔離、登入後只有 Slots 的報表仍能結算。測試使用合成資料與專用測試密碼。
@@ -180,3 +182,17 @@ Streamlit Community Cloud 需監看 `main`、Main file 為 `app.py`；平台完�
 - 沿用正式站現有帳密登入、Secrets、佣金倍率、結算公式與環境資料隔離。本次發布不包含測試中的 Google 登入、授權管理或 Neon 整合，也不將測試帳號及資料帶到正式站。
 - 測試站版本已通過 109 項自動測試與 Chromium 手機模擬的上傳、三種計算、下載、錯誤拒絕及登出流程，使用者亦已確認實際 iPhone Safari 可用。自動 WebKit 安裝受環境網路限制而未完成；不將 Chromium 模擬視為自動 Safari 驗證。
 - 正式候選版通過 Python 編譯與 80 項測試，包含正式／測試環境的相容上傳與登出隔離。正式 `app.py` 隔離副本亦通過 Chromium 手機模擬：阻擋 axios 模組時仍可上傳、完成三種計算、下載標示「正式使用」的 Excel、移除及重選檔案、拒絕錯誤副檔名與登出。此 80 項為正式分支的測試集合，不含仍留在測試分支的 Google／Neon 測試。
+
+
+## 正式版發布：google-access-v4
+
+本版發布已在測試站驗證的 Google 原生 OIDC、使用申請、管理者核准／拒絕／停用與持久 PostgreSQL 審核，保留手機相容上傳及三種 Decimal 結算。同時將報表與歷史改為原生 Markdown 表格，避免顯示 HTML 原始碼。
+
+- 管理者登入各站後可直接選「功能頁面 → 授權管理」，不需另外建立管理網站。各站只管理自己的環境，測試站核准的普通使用者仍須另申請正式權限；未核准或停用者不能上傳或下載報表。
+- `approval_app.py` 保留為可選的獨立管理入口，與內建頁共用 `approval_ui.py`。所有申請與審核按 Google 穩定 subject 及環境隔離，確認欄綁定帳號、環境、revision 與決定，過期決定不能覆寫新結果。
+- 依賴使用 `streamlit[auth]==1.66.1`，含 Google 轉址所需 HTTPX，修正缺套件造成的 Internal server error。CI 以獨立 venv 安裝，避免預裝套件掩蓋缺漏。
+- 正式 Google Secrets 需由管理者在平台儲存，Cookie secret 與測試站不同，回呼為 `https://excel-agent-settlement.streamlit.app/oauth2callback`。正式站原本的帳密在切換 Secrets 前維持使用；Google 或資料庫設定錯誤時鎖定，不自動退回帳密。
+- 原始報表不寫入授權資料庫。Google 使用者使用自己的資料空間，不自動搬移舊帳密的倍率或歷史；第一次登入應確認倍率與結算比例。
+- 本次從隔離環境執行 Python 編譯與 126 項測試，包含兩個環境的 Google 申請、審核、撤權、不可跨環境核准、普通使用者無管理權、原生 OAuth 路由、手機相容上傳及既有結算。測試站管理者的真實 Google 登入已由使用者確認；正式站回呼與登入須在平台設定後實際確認。
+
+正式站： https://excel-agent-settlement.streamlit.app/ 。完整設定及切換驗收見 [GOOGLE_PRODUCTION_SETUP.md](GOOGLE_PRODUCTION_SETUP.md)。未來改動仍先在測試分支驗證，取得使用者對當次發布同意後才更新正式分支。

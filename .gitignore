@@ -10,3 +10,8 @@ test_data/*.xlsx
 data/
 .coverage
 htmlcov/
+.env
+.env.*
+local-only/
+.neon
+node_modules/
