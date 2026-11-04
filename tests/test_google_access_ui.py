@@ -109,36 +109,41 @@ def test_google_account_switch_clears_other_users_report(runtime):
     assert at.session_state['google_subject']=='second-sub'
 
 
-def test_staging_embedded_management_cannot_change_production(runtime):
+@pytest.mark.parametrize('environment,other,entry,label', [
+    ('staging', 'production', 'staging_app.py', '內部測試'),
+    ('production', 'staging', 'app.py', '正式使用'),
+])
+def test_embedded_management_cannot_change_other_environment(runtime, environment, other, entry, label):
     store, user = runtime
     store.request(USER, 'staging')
     store.request(USER, 'production')
     user.identity = ADMIN
-    at = app('staging', 'staging_app.py').run()
-    at.session_state['approval_environment'] = 'production'
-    at.radio(key='google_staging_page').set_value('授權管理').run()
+    at = app(environment, entry).run()
+    at.session_state['approval_environment'] = other
+    at.radio(key=f'google_{environment}_page').set_value('授權管理').run()
     assert not at.exception
     assert len(at.get('file_uploader')) == 0
     assert len(at.selectbox) == 0 and len(at.dataframe) == 0
     assert not any(r.label == '管理環境' for r in at.radio)
-    assert any('此頁只管理「內部測試」' in message.value for message in at.info)
+    assert any(f'此頁只管理「{label}」' in message.value for message in at.info)
     at.checkbox[0].check().run()
     next(b for b in at.button if b.label == '套用審核決定').click().run()
     assert not at.exception and at.success
-    assert store.status(USER, 'staging') == 'approved'
-    assert store.status(USER, 'production') == 'pending'
-    assert len(store.audit_log(ADMIN, environment='staging')) == 2
+    assert store.status(USER, environment) == 'approved'
+    assert store.status(USER, other) == 'pending'
+    assert len(store.audit_log(ADMIN, environment=environment)) == 2
 
 
-def test_member_cannot_forge_staging_management_navigation(runtime, monkeypatch):
+@pytest.mark.parametrize('environment,entry', [('staging', 'staging_app.py'), ('production', 'app.py')])
+def test_member_cannot_forge_management_navigation(runtime, monkeypatch, environment, entry):
     store, _ = runtime
-    store.request(USER, 'staging')
-    store.review(ADMIN, USER.subject, 'staging', 'approved', 1)
+    store.request(USER, environment)
+    store.review(ADMIN, USER.subject, environment, 'approved', 1)
     def forbidden(*args, **kwargs):
         raise AssertionError('An ordinary user must not read applicant records')
     monkeypatch.setattr(store, 'list_requests', forbidden)
-    at = app('staging', 'staging_app.py').run()
-    at.session_state['google_staging_page'] = '授權管理'
+    at = app(environment, entry).run()
+    at.session_state[f'google_{environment}_page'] = '授權管理'
     at.run()
     assert not at.exception and len(at.get('file_uploader')) == 1
     assert not any(r.label == '功能頁面' for r in at.radio)
@@ -164,15 +169,16 @@ def test_review_confirmation_binds_to_the_current_decision(runtime, monkeypatch)
     assert store.status(USER, 'staging') == 'pending'
 
 
-def test_staging_request_approve_and_revoke_through_embedded_ui(runtime):
+@pytest.mark.parametrize('environment,entry', [('staging', 'staging_app.py'), ('production', 'app.py')])
+def test_request_approve_and_revoke_through_embedded_ui(runtime, environment, entry):
     store, user = runtime
-    applicant = app('staging', 'staging_app.py').run()
+    applicant = app(environment, entry).run()
     applicant.button(key='submit_access_request').click().run()
-    assert store.status(USER, 'staging') == 'pending'
+    assert store.status(USER, environment) == 'pending'
     assert len(applicant.get('file_uploader')) == 0
     user.identity = ADMIN
-    manager = app('staging', 'staging_app.py').run()
-    manager.radio(key='google_staging_page').set_value('授權管理').run()
+    manager = app(environment, entry).run()
+    manager.radio(key=f'google_{environment}_page').set_value('授權管理').run()
     manager.checkbox[0].check().run()
     next(b for b in manager.button if b.label == '套用審核決定').click().run()
     user.identity = USER
@@ -182,7 +188,7 @@ def test_staging_request_approve_and_revoke_through_embedded_ui(runtime):
     applicant.session_state['compatible_upload_nonce'] = 'synthetic-instance'
     user.identity = ADMIN
     manager.run()
-    manager.radio(key='approval_status_staging').set_value('approved').run()
+    manager.radio(key=f'approval_status_{environment}').set_value('approved').run()
     next(r for r in manager.radio if r.label == '審核決定').set_value('revoked').run()
     manager.checkbox[0].check().run()
     next(b for b in manager.button if b.label == '套用審核決定').click().run()
@@ -191,7 +197,7 @@ def test_staging_request_approve_and_revoke_through_embedded_ui(runtime):
     assert not applicant.exception and len(applicant.get('file_uploader')) == 0
     assert 'member_upload' not in applicant.session_state
     assert 'compatible_upload_nonce' not in applicant.session_state
-    assert store.status(USER, 'staging') == 'revoked'
+    assert store.status(USER, environment) == 'revoked'
 
 
 def test_failed_review_never_reports_success(runtime, monkeypatch):

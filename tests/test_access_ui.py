@@ -268,14 +268,15 @@ def test_account_search_and_missing_account_clear_results(account,monkeypatch):
     assert next(r for r in at.radio if r.label=='代理帳號').options==['Agent_A']
 
 
-def test_compatible_upload_computes_all_modes_and_logout_clears_file(account, monkeypatch):
+@pytest.mark.parametrize("environment", ["production", "staging"])
+def test_compatible_upload_computes_all_modes_and_logout_clears_file(account, monkeypatch, environment):
     import base64
     import mobile_upload
     from test_sports_settlement import sports_report
     data = sports_report()
     value = {"name": "synthetic.xlsx", "size": len(data), "data": base64.b64encode(data).decode()}
     monkeypatch.setattr(mobile_upload, "_upload_component", lambda **kwargs: value)
-    at = login(app(account, 'staging').run())
+    at = login(app(account, environment).run())
     at.checkbox(key="compatible_upload").check().run()
     assert not at.exception and len(at.get("file_uploader")) == 0
     assert next(m.value for m in at.metric if m.label == '最終結算') == '22.19'

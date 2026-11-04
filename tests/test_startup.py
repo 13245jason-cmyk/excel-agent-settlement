@@ -31,7 +31,7 @@ assert at.text_input(key='login_username').label == '帳號'
 assert at.text_input(key='login_password').label == '密碼'
 assert len(at.get('file_uploader')) == 0
 assert len(at.dataframe) == 0
-assert any(c.value == '版本：google-access-v3' for c in at.caption)
+assert any(c.value == '版本：google-access-v4' for c in at.caption)
 loaded = [m for m in ('pandas', 'openpyxl', 'member_commission') if m in sys.modules]
 assert not loaded, f'Login unnecessarily loaded report libraries: {loaded}'
 """

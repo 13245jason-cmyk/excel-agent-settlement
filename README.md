@@ -131,7 +131,7 @@ python -m compileall -q authentication.py access.py app_ui.py app.py staging_app
 
 ## 單一會員佣金與結算
 
-此功能已開放於正式 `main/app.py` 與測試 `staging/staging_app.py`。登入後選「單一會員佣金」，上傳報表，再選擇會員帳號。正式版 `mobile-upload-v1` 與測試分支 `google-access-v3` 均使用帳號搜尋欄與點選清單。
+此功能已開放於正式 `main/app.py` 與測試 `staging/staging_app.py`。登入後選「單一會員佣金」，上傳報表，再選擇會員帳號。正式與測試的 `google-access-v4` 發布均保留帳號搜尋欄與點選清單。
 
 - 只讀「直屬會員」分頁；依會員帳號、遊戲分類、有效投注、輸贏金額標題定位。
 - 帳號不分大小寫；支援會員帳號欄合併儲存格。沒有明確帳號且不是合併儲存格的遊戲列會報錯，不猜測歸屬。
@@ -215,9 +215,9 @@ Streamlit Community Cloud 需監看 `main`、Main file 為 `app.py`；平台完�
 - `npm run build` 通過 Python 編譯與 112 項測試。Chromium 電腦及手機尺寸的瀏覽器檢查確認三種模式與歷史呈現真正的表格欄列，顯示金額正確、可重算及下載。另用含 `|` 與 HTML 的合成檔名驗證歷史仍維持欄數，未產生圖片或腳本元素。手機為 Chromium 模擬，非實際 Safari 引擎。
 - 本次僅推送 `staging`，版本為 `mobile-upload-v2`；正式 `main` 已於前次核准發布 `mobile-upload-v1`，尚未套用這次表格顯示修正。需要使用者同意本次發布後才能更新正式站，Community Cloud 的實際更新完成狀態仍須另行確認。
 
-## Google 登入與申請審核：google-access-v3（測試分支）
+## Google 登入與申請審核：google-access-v4
 
-Google 原生 OIDC 登入及 PostgreSQL 持久審核已整合測試站。管理者使用已驗證 Google 帳號登入後，可在同一站的「功能頁面 → 授權管理」核准、拒絕或停用申請，不需要另架第三個網站。內建管理頁只管理內部測試，普通使用者看不到管理頁，不能以頁面參數取得權限。獨立 `approval_app.py` 仍可選用，並共用新的 `approval_ui.py`。
+Google 原生 OIDC 登入及 PostgreSQL 持久審核整合各站。管理者使用已驗證 Google 帳號登入後，可在同一站的「功能頁面 → 授權管理」核准、拒絕或停用申請，不需要另架第三個網站。內建管理頁固定管理該站環境：正式站只管理正式權限，測試站只管理測試權限。普通使用者看不到管理頁，不能以頁面參數取得權限。獨立 `approval_app.py` 仍可選用，並共用 `approval_ui.py`。
 
 申請及操作紀錄採原生 Markdown 表格、帳號搜尋與清單點選，避開互動表格／Selectbox 的額外載入。確認欄與帳號、環境、revision、審核決定綁定，更換決定須重新勾選；後端仍以 revision 防止過期頁面覆蓋他人決定。本環境操作紀錄先在資料庫按環境篩選；台北時間顯示。
 
@@ -225,7 +225,9 @@ Google 原生 OIDC 登入及 PostgreSQL 持久審核已整合測試站。管理�
 
 新增測試實際執行 Streamlit 原生登入／回呼 HTTP 路由，僅模擬 Google discovery HTTP 回應，確認 Google 轉址、state、nonce、支援時的 S256 PKCE，以及偽造 provider／回呼 state 被拒絕、上游錯誤不洩漏內部資訊。CI 亦改用獨立 venv，避免依賴預裝套件。**這些測試仍不代表真實 Google OAuth 已成功**，更新後須由擁有者在公開測試站登入確認。這次不需改動已填妥的 Secrets，Google 或資料庫失敗時仍鎖定，不退回帳密。
 
-私有 Secrets 範本與精確設定步驟見 [GOOGLE_AUTH_SETUP.md](GOOGLE_AUTH_SETUP.md)。只發布 `staging`，正式站目前的帳密及 `main` 保持原狀。之後每次需求均先測試站完成，取得使用者對該次發布的明確同意後才更新 `main`；此流程也記錄於 `AGENTS.md`。
+內部測試步驟見 [GOOGLE_AUTH_SETUP.md](GOOGLE_AUTH_SETUP.md)，本次核准的正式發布與切換步驟見 [GOOGLE_PRODUCTION_SETUP.md](GOOGLE_PRODUCTION_SETUP.md)。正式程式發布不會自行改掉正式 Secrets；未切換設定前沿用原本帳密。之後每次需求仍先測試站完成，取得使用者對該次發布的明確同意後才更新 `main`；此流程也記錄於 `AGENTS.md`。
+
+`google-access-v4` 在隔離環境通過 126 項測試，新增正式站內建審核與雙向環境隔離驗證。測試站的真實 Google 管理者登入已由使用者確認；正式站仍須新增專屬 callback 並儲存正式 Secrets 後才能確認啟用。
 
 ## Neon CLI 與環境變數整合（測試分支）
 

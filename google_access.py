@@ -147,9 +147,11 @@ def require_google_access(environment):
     return Account('google:'+identity.subject, identity.name, hashlib.sha256(identity.subject.encode()).hexdigest(), (environment,))
 
 
-def render_staging_management():
-    """Called after Google access is granted; embedded management is staging-only."""
-    _, store = setup('staging')
+def render_management(environment):
+    """Each app manages only its own environment after verified Google login."""
+    if environment not in ENVIRONMENTS:
+        raise ApprovalError('未知的授權環境')
+    _, store = setup(environment)
     try:
         identity = verified_identity(st.user.to_dict())
         admin = store.is_admin(identity)
@@ -157,13 +159,14 @@ def render_staging_management():
         clear()
         st.error('無法驗證管理者身分，請重新登入。')
         st.stop()
+    page_key = f'google_{environment}_page'
     if not admin:
-        if 'google_staging_page' in st.session_state:
-            del st.session_state['google_staging_page']
+        if page_key in st.session_state:
+            del st.session_state[page_key]
         return False
-    page = st.radio('功能頁面', ['報表結算', '授權管理'], key='google_staging_page')
+    page = st.radio('功能頁面', ['報表結算', '授權管理'], key=page_key)
     if page == '授權管理':
         from approval_ui import render_approval_management
-        render_approval_management(store, identity, environments=('staging',))
+        render_approval_management(store, identity, environments=(environment,))
         return True
     return False

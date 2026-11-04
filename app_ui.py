@@ -130,13 +130,13 @@ def render_member_commission(uploaded, rates, ratio_input, *, agent_mode=False, 
 def run_app(environment: str) -> None:
     st.set_page_config(page_title="Excel 代理結算系統", page_icon="🧾", layout="wide")
     st.title(f"🧾 Excel 代理結算系統｜{ENVIRONMENTS[environment]}")
-    st.caption("版本：google-access-v3")
+    st.caption("版本：google-access-v4")
     if environment == "staging":
         st.warning("🧪 內部測試環境：請使用測試報表，結果不可作為正式付款依據。")
     account = require_login(environment)
-    if environment == "staging" and st.secrets.get("access", {}).get("login_method") == "google":
-        from google_access import render_staging_management
-        if render_staging_management():
+    if st.secrets.get("access", {}).get("login_method") == "google":
+        from google_access import render_management
+        if render_management(environment):
             return
     mode = st.radio("計算模式", ["整體代理結算", "單一會員佣金", "單一下線代理佣金"], key="calculation_mode")
     member_mode = mode != "整體代理結算"

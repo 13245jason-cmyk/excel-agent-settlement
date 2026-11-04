@@ -1,13 +1,13 @@
 # Google 登入與申請審核（先內部測試）
 
-程式只推送 `staging`。正式 `main` 與正式站的帳密登入維持現況；未來仍須使用者對每次發布明確同意後才更新正式站。
+本文件說明內部測試設定。開發先推送 `staging`，取得使用者對每次發布明確同意後才更新正式站；正式啟用另見 [GOOGLE_PRODUCTION_SETUP.md](GOOGLE_PRODUCTION_SETUP.md)。未儲存正式 Google Secrets 前，正式站沿用原本帳密。
 
 ## 目前可用的程式流程
 
 1. 使用 Google 原生 OIDC 登入，只要求 `openid email profile`。
 2. 非管理者提出使用申請，待核准、拒絕、停用者均看不到報表操作。
-3. 管理者登入同一測試站後，選「授權管理」，搜尋帳號並核准、拒絕或停用。**不必另外建立管理網站**，也不需要第三個 OAuth callback。
-4. 此內建管理頁只管理內部測試，不能切到正式環境；申請與操作紀錄亦按環境隔離，時間顯示為台北時間。
+3. 管理者登入同一站後，選「授權管理」，搜尋帳號並核准、拒絕或停用。**不必另外建立管理網站**，也不需要第三個 OAuth callback。
+4. 內建管理頁固定管理各站自己的環境；測試站不能切到正式環境，正式站也不能改測試權限。申請與操作紀錄按環境隔離，時間顯示為台北時間。
 5. 一般使用者重新檢查授權後可使用報表。停用後，下次操作或每 30 秒的定期檢查會鎖定功能並清除報表狀態。
 6. 審核須勾選當前帳號、環境及決定的確認欄；更換決定會重新要求確認，過期 revision 不能覆蓋另一位管理者的決定。
 
@@ -82,8 +82,7 @@
 ## 程式驗證與限制
 
 ```bash
-npm run build
-# 或
+python -m compileall -q app.py staging_app.py app_ui.py approval_app.py approval_ui.py google_access.py approvals.py display_tables.py runtime_database.py mobile_upload.py
 python -m pytest -q
 ```
 
