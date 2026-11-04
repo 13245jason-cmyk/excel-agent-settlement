@@ -118,3 +118,17 @@ def test_postgres_transport_always_verifies_tls(monkeypatch):
     ApprovalStore.connect('postgresql://test:test@db.example/approvals?sslmode=disable',[ADMIN.email])
     assert captured['connect_args']['sslmode']=='verify-full'
     assert captured['connect_args']['sslrootcert']
+
+
+def test_audit_environment_filter_happens_before_returning_records(store):
+    store.request(USER, 'production')
+    store.request(USER, 'staging')
+    store.review(ADMIN, USER.subject, 'staging', 'approved', 1)
+    records = store.audit_log(ADMIN, environment='staging')
+    assert len(records) == 2
+    assert {row['environment'] for row in records} == {'staging'}
+    assert len(store.audit_log(ADMIN, environment='production')) == 1
+    with pytest.raises(ApprovalError):
+        store.audit_log(USER, environment='staging')
+    with pytest.raises(ApprovalError):
+        store.audit_log(ADMIN, environment='untrusted')

@@ -6,10 +6,10 @@ from pathlib import Path
 import hashlib
 import json
 import re
-from html import escape
 
 from access import account_data_dir, require_login
 from authentication import ENVIRONMENTS
+from display_tables import table_markdown
 
 import streamlit as st
 
@@ -26,27 +26,6 @@ from settlement import (
 )
 
 BASE_DIR = Path(__file__).parent
-
-
-def table_markdown(rows: list[dict]) -> str:
-    """Use native Markdown tables; report data is always literal cell text."""
-    if not rows:
-        return ""
-    columns = list(dict.fromkeys(key for row in rows for key in row))
-
-    def cell(value):
-        text = str(value).replace("\r\n", " ").replace("\r", " ").replace("\n", " ")
-        # Encode delimiters so filenames cannot become cells, links or HTML.
-        return "".join(f"&#{ord(char)};" if char in "\\|`*_[]<>~$!#{}()" else escape(char) for char in text)
-
-    def row(values):
-        return "| " + " | ".join(cell(value) for value in values) + " |"
-
-    return "\n".join([
-        row(columns),
-        "| " + " | ".join("---" for _ in columns) + " |",
-        *(row(item.get(column, "") for column in columns) for item in rows),
-    ])
 
 
 def dstr(value: Decimal) -> str:
@@ -151,10 +130,14 @@ def render_member_commission(uploaded, rates, ratio_input, *, agent_mode=False, 
 def run_app(environment: str) -> None:
     st.set_page_config(page_title="Excel 代理結算系統", page_icon="🧾", layout="wide")
     st.title(f"🧾 Excel 代理結算系統｜{ENVIRONMENTS[environment]}")
-    st.caption("版本：mobile-upload-v2")
+    st.caption("版本：google-access-v2")
     if environment == "staging":
         st.warning("🧪 內部測試環境：請使用測試報表，結果不可作為正式付款依據。")
     account = require_login(environment)
+    if environment == "staging" and st.secrets.get("access", {}).get("login_method") == "google":
+        from google_access import render_staging_management
+        if render_staging_management():
+            return
     mode = st.radio("計算模式", ["整體代理結算", "單一會員佣金", "單一下線代理佣金"], key="calculation_mode")
     member_mode = mode != "整體代理結算"
     agent_mode = mode == "單一下線代理佣金"

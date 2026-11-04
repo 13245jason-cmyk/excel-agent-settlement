@@ -161,7 +161,11 @@ class ApprovalStore:
             conn.execute(insert(audit).values(subject=subject, environment=environment,
                          actor=actor.email, action=decision, created_at=now))
 
-    def audit_log(self, actor):
+    def audit_log(self, actor, environment=None):
         self._require_admin(actor)
+        query = select(audit)
+        if environment is not None:
+            self._environment(environment)
+            query = query.where(audit.c.environment == environment)
         with self.engine.connect() as conn:
-            return [dict(r) for r in conn.execute(select(audit).order_by(audit.c.id.desc()).limit(200)).mappings()]
+            return [dict(r) for r in conn.execute(query.order_by(audit.c.id.desc()).limit(200)).mappings()]

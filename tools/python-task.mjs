@@ -10,7 +10,7 @@ function run(args) {
   if (result.status !== 0) process.exit(result.status || 1);
 }
 if (task === 'build') {
-  run(['-m', 'compileall', '-q', 'app.py', 'staging_app.py', 'approval_app.py', 'app_ui.py', 'access.py', 'authentication.py', 'approvals.py', 'google_access.py', 'runtime_database.py', 'member_commission.py', 'settlement.py', 'mobile_upload.py', 'tools']);
+  run(['-m', 'compileall', '-q', 'app.py', 'staging_app.py', 'approval_app.py', 'approval_ui.py', 'app_ui.py', 'display_tables.py', 'access.py', 'authentication.py', 'approvals.py', 'google_access.py', 'runtime_database.py', 'member_commission.py', 'settlement.py', 'mobile_upload.py', 'tools']);
   run(['-m', 'pytest', '-q']);
   console.log('BUILD PASSED: Python compilation and application test suite.');
 } else if (task === 'start') {

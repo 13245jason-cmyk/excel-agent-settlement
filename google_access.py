@@ -145,3 +145,25 @@ def require_google_access(environment):
     approval_watchdog(environment)
     # Stable Google subject, never user-entered email, owns the local account directory.
     return Account('google:'+identity.subject, identity.name, hashlib.sha256(identity.subject.encode()).hexdigest(), (environment,))
+
+
+def render_staging_management():
+    """Called after Google access is granted; embedded management is staging-only."""
+    _, store = setup('staging')
+    try:
+        identity = verified_identity(st.user.to_dict())
+        admin = store.is_admin(identity)
+    except Exception:
+        clear()
+        st.error('無法驗證管理者身分，請重新登入。')
+        st.stop()
+    if not admin:
+        if 'google_staging_page' in st.session_state:
+            del st.session_state['google_staging_page']
+        return False
+    page = st.radio('功能頁面', ['報表結算', '授權管理'], key='google_staging_page')
+    if page == '授權管理':
+        from approval_ui import render_approval_management
+        render_approval_management(store, identity, environments=('staging',))
+        return True
+    return False
