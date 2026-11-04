@@ -13,9 +13,9 @@
 
 只有 Secrets 的 `authorization.admin_emails` 名單可管理，且必須由 Google 驗證該信箱；不接受自行輸入 email 或 URL 參數作為身分。管理者由名單啟用，不需自己提出申請。所有其他 Google 使用者仍須審核。
 
-## 現在尚缺什麼
+## 啟用需要的三項設定
 
-目前開發環境沒有 Google Web client 憑證、Neon 連線網址，也沒有可操作 Google／Streamlit 管理後台的工具。程式與合成 claims 測試通過，不代表真實 OAuth 已開通。尚未填妥以下設定前，測試站保留原本帳密登入；不要提早切換 `access.login_method`。
+此工作階段沒有可操作 Google／Streamlit 管理後台的工具，外部設定須由擁有者填入私有設定檔及測試站 Secrets。程式與合成 claims 測試通過，不代表真實 OAuth 已開通。首次設定時，未填妥以下三項前保留原本帳密登入，不要提早切換 `access.login_method`。
 
 只需三項外部值：
 
@@ -90,5 +90,11 @@ python -m pytest -q
 本機 UI 以合成已驗證 claims 與隔離 SQLite 驗證授權，不是真實 Google OAuth。CI 的審核服務測試另外配置 PostgreSQL 17；也可對專用的本機 `approval_test` 資料庫設定 `APPROVAL_TEST_DATABASE_URL` 執行 `tests/test_approvals.py`。測試禁止指向非 localhost 或非 approval_test 資料庫。
 
 本次 `google-access-v2` 通過 Python 編譯與 118 項測試；兩個隔離本機 Streamlit 程序另以 Chromium 驗證申請者送出申請、手機尺寸的管理者核准、申請者取得操作介面、管理者停用、下次操作鎖定。普通使用者看不到管理頁，過程無互動表格／Selectbox 模組請求或 JavaScript 錯誤。
+
+### 點登入後出現 Internal server error／缺少 httpx
+
+若 Logs 顯示 `import httpx as httpx2` 與 `ModuleNotFoundError: No module named 'httpx'`，表示伺服器缺少原生 OAuth 所需 HTTP 用戶端，不是 TOML 格式問題。`google-access-v3` 已將 requirements 改為 `streamlit[auth]==1.66.1`，安裝官方登入額外依賴並固定已測版本。Cloud 須完成新 requirements 的安裝，之後從測試站首頁重新點 Google 登入；這次不用重填 Secrets。
+
+修正版在不沿用系統 site-packages 的全新 venv 安裝 requirements，通過 `pip check`、Python 編譯與 122 項測試。新增原生 HTTP 路由測試只模擬 Google discovery 回應，不模擬 OAuth client；驗證轉址與登入安全狀態，仍需在真正 Google 網站完成登入確認。CI 也以獨立 venv 安裝及測試，避免預裝的 HTTPX 掩蓋依賴缺漏。
 
 真正的 Google consent／redirect／callback、Neon TLS 與公開測試站，仍須外部三項設定到位後實際驗證。此開發環境目前的外部網路權限也尚未放行 Google／Neon／Streamlit 站台，不宣稱已完成真實登入。

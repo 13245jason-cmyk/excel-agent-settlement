@@ -27,9 +27,12 @@ jobs:
         with:
           python-version: '3.12'
           cache: pip
-      - run: pip install -r requirements.txt
-      - run: python -m pytest -q
+      - name: Create isolated Python environment
+        run: python -m venv .venv
+      - run: .venv/bin/python -m pip install -r requirements.txt
+      - run: .venv/bin/python -m pip check
+      - run: .venv/bin/python -m pytest -q
       - name: PostgreSQL approval integration tests
-        run: python -m pytest -q tests/test_approvals.py
+        run: .venv/bin/python -m pytest -q tests/test_approvals.py
         env:
           APPROVAL_TEST_DATABASE_URL: postgresql+psycopg://postgres:synthetic-local-db-test@127.0.0.1:5432/approval_test
