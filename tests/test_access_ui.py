@@ -81,10 +81,10 @@ def test_login_save_logout_and_relogin_isolates_user_data(account, tmp_path):
     at = login(app(account).run())
     assert not at.exception
     assert len(at.get("file_uploader")) == 1
-    at.text_input(key="rate_Slots").set_value("0.03")
+    at.text_input(key="rate_電子類型").set_value("0.03")
     next(b for b in at.button if b.label == "儲存設定").click().run()
     path = account_data_dir(tmp_path, "production", account) / "settings.json"
-    assert load_settings(path)["rates"]["Slots"] == "0.03"
+    assert load_settings(path)["rates"]["電子類型"] == "0.03"
     assert not account_data_dir(tmp_path, "staging", account).exists()
     # No report bytes, rate widgets, or identity may survive logout.
     at.session_state["parsed_upload"] = {"digest": "test", "report": {"private": "synthetic"}}
@@ -92,9 +92,9 @@ def test_login_save_logout_and_relogin_isolates_user_data(account, tmp_path):
     assert len(at.get("file_uploader")) == 0
     assert "parsed_upload" not in at.session_state
     assert "authenticated_session" not in at.session_state
-    assert "rate_Slots" not in at.session_state
+    assert "rate_電子類型" not in at.session_state
     login(at)
-    assert at.text_input(key="rate_Slots").value == "0.03"
+    assert at.text_input(key="rate_電子類型").value == "0.03"
 
 
 def test_test_environment_banner_and_no_shared_settings(account, tmp_path):
@@ -104,7 +104,7 @@ def test_test_environment_banner_and_no_shared_settings(account, tmp_path):
     at = login(app(account, "staging").run())
     assert not at.exception
     assert any("內部測試環境" in w.value for w in at.warning)
-    assert at.text_input(key="rate_Slots").value == "0.0258"
+    assert at.text_input(key="rate_電子類型").value == "0.0258"
 
 
 def test_expired_or_revoked_session_clears_report_state(account):
@@ -139,7 +139,7 @@ def test_report_computation_still_uses_only_present_games(account, monkeypatch):
     table = next(m for m in at.markdown if m.value.startswith('| 遊戲類型 |'))
     assert not table.proto.allow_html
     assert len(table.value.splitlines()) == 3
-    assert "| Slots | 100.00 | 0.0258 | 2.58 |" in table.value
+    assert "| 電子類型 | 100.00 | 0.0258 | 2.58 |" in table.value
 
 
 @pytest.mark.parametrize("environment", ["production", "staging"])
@@ -161,9 +161,9 @@ def test_single_member_selection_and_rate_recalculation(account, monkeypatch, en
     assert len(at.dataframe) == 0
     table = next(m for m in at.markdown if m.value.startswith('| 遊戲類型 |'))
     assert not table.proto.allow_html
-    assert "| Slots | 100.00 | -10.00 | 0.0258 | 2.58 |" in table.value
+    assert "| 電子類型 | 100.00 | -10.00 | 0.0258 | 2.58 |" in table.value
     assert at.text_input(key="ratio").value == "0.8"
-    at.text_input(key="rate_Slots").set_value("0.03").run()
+    at.text_input(key="rate_電子類型").set_value("0.03").run()
     assert at.metric[2].value == "3.00"
     next(s for s in at.radio if s.label in ("會員帳號", "代理帳號")).set_value("sample_b").run()
     assert at.metric[2].value == "27.00"
@@ -193,7 +193,7 @@ def test_agent_mode_switch_and_recalculate(account, monkeypatch, environment):
     assert at.metric[2].value=='2.58'
     next(s for s in at.radio if s.label in ("會員帳號", "代理帳號")).set_value('sample_b').run()
     assert at.metric[2].value=='23.22'
-    at.text_input(key='rate_Slots').set_value('0.03').run()
+    at.text_input(key='rate_電子類型').set_value('0.03').run()
     assert at.metric[2].value=='27.00'
     at.radio(key='calculation_mode').set_value('單一會員佣金').run()
     assert next(s for s in at.radio if s.label in ("會員帳號", "代理帳號")).label=='會員帳號'
@@ -210,7 +210,8 @@ def test_sports_and_ratio_are_editable_in_all_three_modes(account, monkeypatch, 
     monkeypatch.setattr(app_ui.st,'file_uploader',lambda *a,**k:buf)
     at=login(app(account,environment).run())
     assert at.text_input(key='rate_Sports').value=='0'
-    assert any('Sports 目前倍率為 0' in w.value for w in at.warning)
+    assert at.text_input(key='rate_Sports').label=='體育 倍率'
+    assert any('體育目前倍率為 0' in w.value for w in at.warning)
     at.text_input(key='rate_Sports').set_value('0.01')
     at.text_input(key='ratio').set_value('0.5').run()
     for mode, expected in [('整體代理結算','31.37'),('單一會員佣金','-29.92'),('單一下線代理佣金','-48.71')]:

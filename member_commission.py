@@ -6,7 +6,8 @@ from decimal import Decimal, InvalidOperation, localcontext
 from io import BytesIO
 
 from openpyxl import Workbook, load_workbook
-from settlement import SettlementError, _game, DEFAULT_SETTLEMENT_RATIO
+from display_tables import game_label
+from settlement import SettlementError, _game, DEFAULT_SETTLEMENT_RATIO, commission_games
 
 
 def norm(value):
@@ -106,10 +107,11 @@ def calculate_member_commission(members, account, rates, ratio=DEFAULT_SETTLEMEN
             item = games.setdefault(game, {'valid_bet': Decimal(0), 'win_loss': Decimal(0)})
             item['valid_bet'] += bet
             item['win_loss'] += win
+        games = commission_games(games, rates)
         for game,item in games.items():
-            rate = amount(rates.get(game), f'{game} 倍率')
+            rate = amount(rates.get(game), f'{game_label(game)} 倍率')
             if not 0 <= rate <= 1:
-                raise SettlementError(f'{game} 倍率必須介於 0 與 1')
+                raise SettlementError(f'{game_label(game)} 倍率必須介於 0 與 1')
             item['rate'] = rate
             item['commission'] = item['valid_bet'] * rate
         total_commission = sum((g['commission'] for g in games.values()), Decimal(0))
@@ -135,7 +137,7 @@ def export_member_commission(filename, result):
     ws.append([f'{label}帳號', result['account']])
     ws.append(['遊戲類型', '有效投注', '輸贏金額', '佣金倍率', '佣金（未捨入）'])
     for game,item in result['games'].items():
-        ws.append([game, str(item['valid_bet']), str(item['win_loss']), str(item['rate']), str(item['commission'])])
+        ws.append([game_label(game), str(item['valid_bet']), str(item['win_loss']), str(item['rate']), str(item['commission'])])
     ws.append(['有效投注合計', str(result['total_valid_bet'])])
     ws.append(['輸贏合計（參考）', str(result['total_win_loss'])])
     ws.append(['總佣金（未捨入）', str(result['total_commission'])])

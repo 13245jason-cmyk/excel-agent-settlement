@@ -9,12 +9,12 @@ import re
 
 from access import account_data_dir, require_login
 from authentication import ENVIRONMENTS
-from display_tables import table_markdown
+from display_tables import table_markdown, game_label
 
 import streamlit as st
 
 from settlement import (
-    DEFAULT_RATES,
+    ELECTRONIC_RATES,
     DEFAULT_SETTLEMENT_RATIO,
     SettlementError,
     calculate_settlement,
@@ -61,7 +61,7 @@ def upload_report():
     return st.file_uploader("報表上傳區（.xlsx）", type=["xlsx"])
 
 
-def render_member_commission(uploaded, rates, ratio_input, *, agent_mode=False, environment="staging"):
+def render_member_commission(uploaded, rates, ratio_input, *, agent_mode=False, environment="staging", download_scope=None):
     from member_commission import (parse_member_accounts, calculate_member_commission, export_member_commission,
                                    parse_agent_accounts, calculate_agent_commission, export_agent_commission)
     label = "代理" if agent_mode else "會員"
@@ -95,7 +95,7 @@ def render_member_commission(uploaded, rates, ratio_input, *, agent_mode=False, 
         st.subheader(f"{label} {result['account']} 的佣金明細")
         st.caption(f"來源：{sheet_name}。結算公式：（該帳號輸贏＋總佣金）×目前結算比例。")
         st.markdown(table_markdown([
-            {"遊戲類型": game, "有效投注": dstr(item["valid_bet"]),
+            {"遊戲類型": game_label(game), "有效投注": dstr(item["valid_bet"]),
              "輸贏金額（參考）": dstr(item["win_loss"]), "倍率": str(item["rate"]),
              "佣金": str(item["commission"].quantize(Decimal('.01'), rounding=ROUND_HALF_UP))}
             for game,item in result["games"].items()
@@ -118,10 +118,10 @@ def render_member_commission(uploaded, rates, ratio_input, *, agent_mode=False, 
             st.info(result['direction'])
         st.caption(f"（{result['total_win_loss']} + {result['total_commission']}）× {result['settlement_ratio']} = {result['final_settlement']}")
         if "Sports" in result["games"] and result["games"]["Sports"]["rate"] == 0:
-            st.warning("Sports 目前倍率為 0，佣金為 0；Sports 輸贏仍已計入結算。請確認左側倍率。")
+            st.warning("體育目前倍率為 0，佣金為 0；體育輸贏仍已計入結算。請確認左側倍率。")
         safe_account = re.sub(r'[^a-zA-Z0-9_.-]', '_', result['account'])[:64]
         st.download_button(f"下載{label}佣金 Excel", exporter(uploaded.name, result),
-                           file_name=f"{ENVIRONMENTS[environment]}_{safe_account}_{label}佣金.xlsx",
+                           file_name=f"{ENVIRONMENTS[environment] if download_scope is None else download_scope}_{safe_account}_{label}佣金.xlsx",
                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
     except (SettlementError, InvalidOperation, ValueError) as exc:
         st.error(str(exc))
@@ -130,7 +130,7 @@ def render_member_commission(uploaded, rates, ratio_input, *, agent_mode=False, 
 def run_app(environment: str) -> None:
     st.set_page_config(page_title="Excel 代理結算系統", page_icon="🧾", layout="wide")
     st.title(f"🧾 Excel 代理結算系統｜{ENVIRONMENTS[environment]}")
-    st.caption("版本：google-access-v4")
+    st.caption("版本：electronic-games-v1")
     if environment == "staging":
         st.warning("🧪 內部測試環境：請使用測試報表，結果不可作為正式付款依據。")
     account = require_login(environment)
@@ -147,21 +147,24 @@ def run_app(environment: str) -> None:
     st.caption("上傳報表後，系統會從「下線代理」與「直屬會員」分頁加總，並以 Decimal 精準計算。")
 
     try:
-        settings = load_settings(settings_file)
+        settings = load_settings(settings_file, group_electronic=True)
     except SettlementError as exc:
         st.error(str(exc))
         st.stop()
     with st.sidebar:
         st.header("佣金倍率設定")
         rate_inputs = {}
-        for game in DEFAULT_RATES:
+        if settings.get("migration_notice"):
+            st.warning(settings["migration_notice"])
+        for game in ELECTRONIC_RATES:
             rate_inputs[game] = st.text_input(
-                f"{game} 倍率", value=str(settings["rates"].get(game, DEFAULT_RATES[game])), key=f"rate_{game}"
+                f"{game_label(game)} 倍率", value=str(settings["rates"].get(game, ELECTRONIC_RATES[game])), key=f"rate_{game}"
             )
         ratio_input = str(settings.get("settlement_ratio", DEFAULT_SETTLEMENT_RATIO))
         st.header("結算比例設定")
         ratio_input = st.text_input("結算比例", value=ratio_input, key="ratio")
-        st.caption("三種計算模式共用目前結算比例，預設 0.8。Sports 預設倍率為 0，可自行設定。")
+        st.caption("三種計算模式共用目前結算比例，預設 0.8。體育預設倍率為 0，可自行設定。")
+        st.caption("電子類型＝Slots＋MiniGame＋Fishing，有效投注合併後乘以同一倍率；輸贏一併計入結算。舊設定先沿用 Slots 倍率。")
         if st.button("儲存設定", use_container_width=True):
             try:
                 parsed, parsed_ratio = read_parameters(rate_inputs, ratio_input)
@@ -185,7 +188,7 @@ def run_app(environment: str) -> None:
             rates, ratio = read_parameters(rate_inputs, ratio_input)
             result = calculate_settlement(report, rates, ratio)
             if "Sports" in result["games"] and result["games"]["Sports"]["rate"] == 0:
-                st.warning("Sports 目前倍率為 0，佣金為 0；Sports 輸贏仍已計入結算。請確認左側倍率。")
+                st.warning("體育目前倍率為 0，佣金為 0；體育輸贏仍已計入結算。請確認左側倍率。")
         except (SettlementError, InvalidOperation, ValueError) as exc:
             st.error(str(exc))
             st.stop()
@@ -197,7 +200,7 @@ def run_app(environment: str) -> None:
             st.info("報表沒有可計算的遊戲明細，系統依總計列顯示結果。")
         rows = []
         for game, item in result["games"].items():
-            rows.append({"遊戲類型": game, "有效投注": dstr(item["valid_bet"]), "佣金倍率": str(item["rate"]), "佣金": dstr(item["commission"])})
+            rows.append({"遊戲類型": game_label(game), "有效投注": dstr(item["valid_bet"]), "佣金倍率": str(item["rate"]), "佣金": dstr(item["commission"])})
         st.subheader("各遊戲有效投注及佣金明細")
         st.markdown(table_markdown(rows))
 

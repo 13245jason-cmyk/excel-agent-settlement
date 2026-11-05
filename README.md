@@ -2,7 +2,19 @@
 
 Python + Streamlit + openpyxl + Decimal。支援 Google 登入後申請審核，以及管理者預先建立的帳密登入。正式使用與內部測試是兩個獨立 Streamlit Community Cloud App。
 
-目前程式版本為 `google-access-v4`。Google 正式啟用請依 [GOOGLE_PRODUCTION_SETUP.md](GOOGLE_PRODUCTION_SETUP.md) 新增正式回呼及儲存正式 Secrets；設定尚未切換前沿用原有帳密。內部測試設定見 [GOOGLE_AUTH_SETUP.md](GOOGLE_AUTH_SETUP.md)。
+目前程式版本為 `electronic-games-v1`，保留 `google-access-v4` 的登入與審核功能。Google 正式啟用請依 [GOOGLE_PRODUCTION_SETUP.md](GOOGLE_PRODUCTION_SETUP.md) 新增正式回呼及儲存正式 Secrets；設定尚未切換前沿用原有帳密。內部測試設定見 [GOOGLE_AUTH_SETUP.md](GOOGLE_AUTH_SETUP.md)。
+
+## 電子類型與中文名稱：electronic-games-v1
+
+使用者已核准將測試版 `9e40363` 的電子類型合併及中文名稱更新套用到正式版。登入版三種模式（整體代理、單一會員、單一下線代理）皆將 **Slots、MiniGame、Fishing** 的有效投注及輸贏合併為「電子類型」，共用一個可調、可儲存的倍率（預設 `0.0258`）。例如有效投注 100、50、25 合併為 175，佣金為 `175 × 電子類型倍率`；結算仍為 `(輸贏＋總佣金) × 結算比例`，比例預設 `0.8`，全程使用 Decimal。
+
+側欄、明細及 Excel 下載顯示四種名稱：電子類型、真人一館（Casino1，預設 `0.011`）、真人二館（Casino2，預設 `0.007`）、體育（Sports，預設 `0`）。真人館與體育只變更顯示文字，各自的計算、原始分類辨識與設定鍵保持原值；報表沒有的類型不補列，總結／小計不重複加總。
+
+載入舊設定時，電子類型先沿用 Slots 倍率；若舊 Slots 與 MiniGame 倍率不同，畫面會顯示兩個舊值，提醒確認後儲存。載入不會覆寫原檔；儲存後下次沿用電子類型倍率、其他遊戲倍率及結算比例。正式／測試仍使用各自環境與帳號的設定、歷史及 Google 授權資料。
+
+本次僅發布已核准的登入版更新，未將獨立免登入 App 加入正式入口。測試版的計算與顯示程式已逐檔核對一致；驗證只使用合成帳號與合成報表，不提交使用者的原始財務報表。
+
+發布驗證：Python 編譯與正式版 147 項自動化測試通過，涵蓋三種結算模式、合併倍率重算、設定儲存與重載、舊設定遷移、中文名稱、Excel 匯出及既有登入／環境隔離。獨立限制版的 16 項測試不屬於此正式入口，已於測試分支的 163 項完整測試驗證。公開網址須待 Community Cloud 完成自動部署，重新整理後確認版本為 `electronic-games-v1`。
 
 ## 兩個環境
 
@@ -87,9 +99,9 @@ environments = ["production"]
 ## 保留的結算規則
 
 1. 從「下線代理」與「直屬會員」工作表，依「遊戲分類」「有效投注」「輸贏金額」欄位定位資料。
-2. 只計算實際出現的已支援遊戲，缺少 MiniGame、Casino1、Casino2 不報錯、不補列。
+2. 只計算實際出現的已支援遊戲，缺少 MiniGame、Fishing、Casino1、Casino2 不報錯、不補列。Slots、MiniGame、Fishing 合併為電子類型。
 3. LiveCasino1/2 映射為 Casino1/2。
-4. 預設倍率：Slots `0.0258`、MiniGame `0.0258`、Casino1 `0.011`、Casino2 `0.007`、Sports `0`（自行設定）；結算比例 `0.8`。
+4. 預設倍率：電子類型 `0.0258`、真人一館（Casino1）`0.011`、真人二館（Casino2）`0.007`、體育（Sports）`0`（自行設定）；結算比例 `0.8`。
 5. 各遊戲佣金 = 有效投注 × 倍率；結算淨額 = 總輸贏 + 總佣金；最終結算 = 結算淨額 × 結算比例，使用 Decimal。
 6. 負數「代理需交上線」、正數「上線需給代理」、零「雙方無需付款」。
 
