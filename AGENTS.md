@@ -9,3 +9,4 @@ User requirement: all future changes go to the testing site first. After testing
 - Production entry: `app.py`; testing entry: `staging_app.py`; Google authorization management entry: `approval_app.py`.
 - Keep account/data isolation between production and staging. Never commit credentials or original financial reports; use synthetic test data.
 - Authentication/authorization configuration and database failures must deny access. Never add a development login bypass to a deployed entry point.
+- User-authorized exception: `limited_app.py` is a separate public app that accepts only the pinned original workbook, verified by byte length and SHA-256 before parsing. It must not bypass login in `app.py` or `staging_app.py`, embed the original report, or share settings/history across anonymous visitors.

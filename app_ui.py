@@ -61,7 +61,7 @@ def upload_report():
     return st.file_uploader("報表上傳區（.xlsx）", type=["xlsx"])
 
 
-def render_member_commission(uploaded, rates, ratio_input, *, agent_mode=False, environment="staging"):
+def render_member_commission(uploaded, rates, ratio_input, *, agent_mode=False, environment="staging", download_scope=None):
     from member_commission import (parse_member_accounts, calculate_member_commission, export_member_commission,
                                    parse_agent_accounts, calculate_agent_commission, export_agent_commission)
     label = "代理" if agent_mode else "會員"
@@ -121,7 +121,7 @@ def render_member_commission(uploaded, rates, ratio_input, *, agent_mode=False, 
             st.warning("Sports 目前倍率為 0，佣金為 0；Sports 輸贏仍已計入結算。請確認左側倍率。")
         safe_account = re.sub(r'[^a-zA-Z0-9_.-]', '_', result['account'])[:64]
         st.download_button(f"下載{label}佣金 Excel", exporter(uploaded.name, result),
-                           file_name=f"{ENVIRONMENTS[environment]}_{safe_account}_{label}佣金.xlsx",
+                           file_name=f"{ENVIRONMENTS[environment] if download_scope is None else download_scope}_{safe_account}_{label}佣金.xlsx",
                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
     except (SettlementError, InvalidOperation, ValueError) as exc:
         st.error(str(exc))
