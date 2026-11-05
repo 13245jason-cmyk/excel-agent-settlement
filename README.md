@@ -1,5 +1,9 @@
 # Excel 代理結算系統（登入制）
 
+此為 **正式版2** 的獨立 `production2` 部署分支，從正式版1 `f3e2e31` 複製相同的執行程式，保留 `electronic-games-v1` 全部功能，並依使用者選擇共用正式版1的 Google 核准帳號。
+
+建立新站請用 [正式版2預填部署頁](https://share.streamlit.io/deploy?repository=13245jason-cmyk%2Fexcel-agent-settlement&branch=production2&mainModule=app.py)，分支選 `production2`、主檔選 `app.py`；新站仍須設定獨立的 Google 回呼與 cookie secret。完整設定及共用權限的範圍見 [PRODUCTION2_SETUP.md](PRODUCTION2_SETUP.md)。以下原有正式版1說明作為功能參考，不要將正式版1的回呼網址直接填進正式版2。
+
 Python + Streamlit + openpyxl + Decimal。支援 Google 登入後申請審核，以及管理者預先建立的帳密登入。正式使用與內部測試是兩個獨立 Streamlit Community Cloud App。
 
 目前程式版本為 `electronic-games-v1`，保留 `google-access-v4` 的登入與審核功能。Google 正式啟用請依 [GOOGLE_PRODUCTION_SETUP.md](GOOGLE_PRODUCTION_SETUP.md) 新增正式回呼及儲存正式 Secrets；設定尚未切換前沿用原有帳密。內部測試設定見 [GOOGLE_AUTH_SETUP.md](GOOGLE_AUTH_SETUP.md)。
