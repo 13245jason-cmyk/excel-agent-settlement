@@ -2,6 +2,8 @@
 
 此為 **正式版2** 的獨立 `production2` 部署分支，從正式版1 `f3e2e31` 複製相同的執行程式，保留 `electronic-games-v1` 全部功能，並依使用者選擇共用正式版1的 Google 核准帳號。
 
+正式版2網址：https://13245jason-cmyk-excel-agent-settlement-app-production2-t65zbd.streamlit.app/ 。Google 回呼及 Secrets 的啟用步驟見 [PRODUCTION2_SETUP.md](PRODUCTION2_SETUP.md)，程式部署本身不代表登入設定已完成。
+
 建立新站請用 [正式版2預填部署頁](https://share.streamlit.io/deploy?repository=13245jason-cmyk%2Fexcel-agent-settlement&branch=production2&mainModule=app.py)，分支選 `production2`、主檔選 `app.py`；新站仍須設定獨立的 Google 回呼與 cookie secret。完整設定及共用權限的範圍見 [PRODUCTION2_SETUP.md](PRODUCTION2_SETUP.md)。以下原有正式版1說明作為功能參考，不要將正式版1的回呼網址直接填進正式版2。
 
 Python + Streamlit + openpyxl + Decimal。支援 Google 登入後申請審核，以及管理者預先建立的帳密登入。正式使用與內部測試是兩個獨立 Streamlit Community Cloud App。

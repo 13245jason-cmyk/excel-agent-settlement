@@ -2,6 +2,20 @@
 
 正式版2從正式版1 `main` 的 `f3e2e31` 複製，使用獨立 `production2` 分支及同一個 `app.py` 入口。計算、登入、審核、倍率、歷史及下載的執行程式與正式版1完全相同，版本皆為 `electronic-games-v1`；本次不修改正式版1或測試站。
 
+使用者已提供的新站網址為：https://13245jason-cmyk-excel-agent-settlement-app-production2-t65zbd.streamlit.app/ 。尚須在 Google 與新 App 完成下列回呼／Secrets 設定，才能驗收真實登入。
+
+## 此站的精確回呼及私有設定檔
+
+在原有 Google 網頁 OAuth 用戶端的 Authorized redirect URIs **新增**：
+
+```text
+https://13245jason-cmyk-excel-agent-settlement-app-production2-t65zbd.streamlit.app/oauth2callback
+```
+
+保留正式版1與測試站的原有 URI。工作區已由先前備妥的正式版1私有設定製作 `local-only/google-production2-setup/streamlit-secrets.production2.toml`：沿用 Google、管理者及正式授權資料庫，僅改新站回呼並生成另一組 cookie secret。此檔為 Git 忽略、權限 0600 的私有檔案，不將內容貼到聊天或 GitHub。
+
+新增 Google 回呼後，將此私有檔案的**完整內容**貼至正式版2的 App settings → Secrets 並儲存；不要覆蓋正式版1的 Secrets。若正式版1的線上私有設定已在之後變更，應以現有正式版1設定為準，沿用同一資料庫並套用本頁的新回呼和獨立 cookie secret。
+
 ## 建立新 App
 
 在 [Streamlit 預填部署頁](https://share.streamlit.io/deploy?repository=13245jason-cmyk%2Fexcel-agent-settlement&branch=production2&mainModule=app.py) 建立另一個 App：
@@ -34,7 +48,7 @@
 
 接著到 Google Auth Platform → Clients → 目前的網頁應用程式用戶端，在 Authorized redirect URIs **新增正式版2的相同回呼網址**；保留正式版1與測試站的原有回呼。儲存 Google 及 Streamlit 設定後，重新開啟正式版2。
 
-公開範本為 `.streamlit/google-production2-secrets.example.toml`，內容都是占位值，不能直接登入。以原站的實際私有設定為準，避免覆蓋其他必要欄位或重複同名 TOML 區塊。
+公開範本為 `.streamlit/google-production2-secrets.example.toml`，其中密鑰與資料庫仍是占位值，不能直接登入。以原站的實際私有設定為準，避免覆蓋其他必要欄位或重複同名 TOML 區塊。
 
 ## 共用及獨立的範圍
 
