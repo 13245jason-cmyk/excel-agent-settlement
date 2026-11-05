@@ -50,3 +50,5 @@ streamlit run limited_app.py
 ## 將既有公開限制版切到獨立分支
 
 若 Streamlit 部署設定允許編輯 Branch，將 `staging` 改為 `limited`，Main file 保持 `limited_app.py`，儲存並重新部署。若沒有可修改 Branch 的欄位，先用本頁預填連結另建 `limited` 分支的 App，驗收後再由使用者決定網址替換方式，不先刪除舊站。只有 Cloud 實際改用 `limited` 後，後續 `staging` 更新才不會自動部署到限制版。分支已建立不代表 Cloud 已切換。
+
+目前使用者提供的獨立限制版網址：https://13245jason-cmyk-excel-agent-settlement-limited-app-limit-fsho8v.streamlit.app/ 。舊的 `limited-app-stagi-g7hcnd` 站未刪除，分享時請使用本段的新網址。
