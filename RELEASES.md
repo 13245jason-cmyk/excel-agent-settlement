@@ -50,3 +50,5 @@ Streamlit 完成重新部署後，才會在網址顯示所選版本；部署可�
 ## 公開限制版分離
 
 `limited` 已從目前可用版本建立，後續不自動合併 `staging`。既有 Cloud 限制站必須改為從 `limited`／`limited_app.py` 部署，才能真正隔離。若平台不提供直接編輯 Branch 的欄位，先以 [獨立分支建立新 App](https://share.streamlit.io/deploy?repository=13245jason-cmyk%2Fexcel-agent-settlement&branch=limited&mainModule=limited_app.py)，驗收後再由使用者決定網址替換方式，不先刪除舊站。程式分支建立不代表 Cloud 設定已切換。
+
+使用者已透過獨立分支部署流程提供新的公開限制版網址：https://13245jason-cmyk-excel-agent-settlement-limited-app-limit-fsho8v.streamlit.app/ 。四站清單與部署設定現以此網址為準，舊的 `limited-app-stagi-g7hcnd` 站未刪除。
