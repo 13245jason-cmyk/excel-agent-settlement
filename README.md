@@ -20,7 +20,7 @@ Python + Streamlit + openpyxl + Decimal。採管理者預先建立帳號、不�
 
 新增 `limited_app.py`，版本 `limited-report-v1`：不用登入，只接受指定原始報表的完整內容，以長度與 SHA-256 在解析前驗證。改名可用，修改／重存／重新匯出會拒絕。保留三種計算、倍率與比例調整、手機上傳及 Excel 下載；參數僅保留目前分頁，不保存匿名歷史或共用設定。原始財務報表不加入 Git。
 
-目前只推送測試分支；部署時建立獨立 App，選 `staging`、主檔 `limited_app.py`、Secrets 留空，既有正式與測試站保留登入。啟動及部署步驟見 [LIMITED_SETUP.md](LIMITED_SETUP.md)。
+目前只推送測試分支；部署時建立獨立 App，選 `limited`、主檔 `limited_app.py`、Secrets 留空，既有正式與測試站保留登入。啟動及部署步驟見 [LIMITED_SETUP.md](LIMITED_SETUP.md)。
 
 ## 兩個環境
 

@@ -49,4 +49,4 @@ streamlit run limited_app.py
 
 ## 將既有公開限制版切到獨立分支
 
-開啟限制版的 Streamlit App settings，將部署 Branch 從 `staging` 改為 `limited`，Main file 保持 `limited_app.py`，儲存並重新部署；若平台不能直接修改 Branch，使用同一入口重新部署，保留原有自訂網址（先確認平台允許再刪除原 App）。只有這個後台設定完成後，後續 `staging` 更新才不會自動部署到限制版。分支已建立不代表 Cloud 已切換。
+若 Streamlit 部署設定允許編輯 Branch，將 `staging` 改為 `limited`，Main file 保持 `limited_app.py`，儲存並重新部署。若沒有可修改 Branch 的欄位，先用本頁預填連結另建 `limited` 分支的 App，驗收後再由使用者決定網址替換方式，不先刪除舊站。只有 Cloud 實際改用 `limited` 後，後續 `staging` 更新才不會自動部署到限制版。分支已建立不代表 Cloud 已切換。
