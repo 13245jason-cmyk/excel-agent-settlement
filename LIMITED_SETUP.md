@@ -30,19 +30,23 @@ streamlit run limited_app.py
 
 ## 部署獨立網站
 
-在 Streamlit Community Cloud 建立新的 App，保留原有兩站的設定。可從 [預填部署頁](https://share.streamlit.io/deploy?repository=13245jason-cmyk%2Fexcel-agent-settlement&branch=staging&mainModule=limited_app.py) 開始；欄位如下：
+在 Streamlit Community Cloud 建立新的 App，保留原有兩站的設定。可從 [預填部署頁](https://share.streamlit.io/deploy?repository=13245jason-cmyk%2Fexcel-agent-settlement&branch=limited&mainModule=limited_app.py) 開始；欄位如下：
 
 | 欄位 | 值 |
 |---|---|
 | Repository | `13245jason-cmyk/excel-agent-settlement` |
-| Branch | `staging` |
+| Branch | `limited` |
 | Main file | `limited_app.py` |
 | Secrets | 留空，不需填登入或資料庫設定 |
 
-部署後設定新 App 的 Sharing 為公開（Public／Anyone with the link），讓訪客不需平台登入。公開網址由平台建立後確認，不將範例名稱當成已部署網址。此變更目前僅推 `staging`，不改正式 `main` 或既有 App 的 main file。
+部署後設定新 App 的 Sharing 為公開（Public／Anyone with the link），讓訪客不需平台登入。公開網址由平台建立後確認，不將範例名稱當成已部署網址。此站已固定至獨立 `limited` 分支，不改正式 `main` 或既有 App 的 main file。
 
 ## 驗證
 
 `npm run build` 通過 Python 編譯及 142 項測試。回歸資料為合成報表，未將原始財務報表加入 Git。涵蓋相同檔名／相同長度的不同內容、數字相同的重新儲存檔、只用驗證快照解析、拒絕前不解析報表、三種計算、下載標示、移除／替換後清除舊結果，以及匿名工作階段的參數隔離；原有登入與計算測試仍通過。
 
 另外以指定原檔在隔離 Chromium 電腦與手機模擬中驗證原檔接受、改名接受、三種計算、下載、同名一位元組修改拒絕、網址 hash 覆蓋無效與舊畫面清除；未顯示私人帳號或金額於驗證輸出。手機為 Chromium 模擬，不代表本次已在實際 iPhone Safari 驗收。
+
+## 將既有公開限制版切到獨立分支
+
+開啟限制版的 Streamlit App settings，將部署 Branch 從 `staging` 改為 `limited`，Main file 保持 `limited_app.py`，儲存並重新部署；若平台不能直接修改 Branch，使用同一入口重新部署，保留原有自訂網址（先確認平台允許再刪除原 App）。只有這個後台設定完成後，後續 `staging` 更新才不會自動部署到限制版。分支已建立不代表 Cloud 已切換。

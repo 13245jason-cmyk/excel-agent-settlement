@@ -1,3 +1,5 @@
+> 公開限制版的固定部署分支：`limited`，入口：`limited_app.py`。本分支保留目前已驗證的限制版程式，後續測試站改動不自動合併。既有 Cloud App 還需要將 Branch 切換為 `limited` 才完成站台分離；詳見 [LIMITED_SETUP.md](LIMITED_SETUP.md)。
+
 # Excel 代理結算系統（登入制）
 
 Python + Streamlit + openpyxl + Decimal。採管理者預先建立帳號、不開放註冊，正式使用與內部測試是兩個獨立 Streamlit Community Cloud App。
