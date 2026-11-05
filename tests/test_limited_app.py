@@ -82,6 +82,9 @@ def test_limited_entry_opens_without_secrets_or_login(monkeypatch):
     assert len(at.get('file_uploader')) == 1
     assert not any(t.label in ('帳號', '密碼') for t in at.text_input)
     assert not any('登入' in b.label or '歷史' in b.label for b in at.button)
+    assert at.text_input(key='limited_rate_Casino1').label == '真人一館 倍率'
+    assert at.text_input(key='limited_rate_Casino2').label == '真人二館 倍率'
+    assert at.text_input(key='limited_rate_Sports').label == '體育 倍率'
     assert len(at.metric) == 0 and len(at.get('download_button')) == 0
 
 

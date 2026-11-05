@@ -4,7 +4,7 @@ from decimal import InvalidOperation
 import streamlit as st
 
 from app_ui import dstr, parse_uploaded_report, read_parameters, render_member_commission, upload_report
-from display_tables import table_markdown
+from display_tables import table_markdown, game_label
 from limited_report import LimitedReportError, checked_upload
 from settlement import DEFAULT_RATES, DEFAULT_SETTLEMENT_RATIO, SettlementError, calculate_settlement, export_result_xlsx
 
@@ -24,7 +24,7 @@ def run_limited_app():
     mode = st.radio("計算模式", ["整體代理結算", "單一會員佣金", "單一下線代理佣金"], key="limited_calculation_mode")
     with st.sidebar:
         st.header("佣金倍率設定")
-        rates = {game: st.text_input(f"{game} 倍率", value=str(value), key=f"limited_rate_{game}")
+        rates = {game: st.text_input(f"{game_label(game)} 倍率", value=str(value), key=f"limited_rate_{game}")
                  for game, value in DEFAULT_RATES.items()}
         st.header("結算比例設定")
         ratio = st.text_input("結算比例", value=str(DEFAULT_SETTLEMENT_RATIO), key="limited_ratio")
@@ -50,7 +50,7 @@ def run_limited_app():
         result = calculate_settlement(report, parsed_rates, parsed_ratio)
         st.subheader("各遊戲有效投注及佣金明細")
         st.markdown(table_markdown([
-            {"遊戲類型": game, "有效投注": dstr(item["valid_bet"]), "佣金倍率": str(item["rate"]), "佣金": dstr(item["commission"])}
+            {"遊戲類型": game_label(game), "有效投注": dstr(item["valid_bet"]), "佣金倍率": str(item["rate"]), "佣金": dstr(item["commission"])}
             for game, item in result["games"].items()
         ]))
         columns = st.columns(4)
@@ -66,7 +66,7 @@ def run_limited_app():
             st.info("雙方無需付款")
         st.caption(f"（{result['total_win_loss']} + {result['total_commission']}）× {result['settlement_ratio']} = {final}")
         if "Sports" in result["games"] and result["games"]["Sports"]["rate"] == 0:
-            st.warning("Sports 目前倍率為 0，佣金為 0；Sports 輸贏仍已計入結算。")
+            st.warning("體育目前倍率為 0，佣金為 0；體育輸贏仍已計入結算。")
         st.download_button("下載限制版結算 Excel", export_result_xlsx(report, result),
                            file_name="限制版_結算結果.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
     except (SettlementError, InvalidOperation, ValueError) as exc:

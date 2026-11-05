@@ -2,6 +2,11 @@
 from html import escape
 
 
+def game_label(game: str) -> str:
+    """Presentation only: calculation and persisted setting keys stay unchanged."""
+    return {"Casino1": "真人一館", "Casino2": "真人二館", "Sports": "體育"}.get(game, game)
+
+
 def table_markdown(rows: list[dict]) -> str:
     if not rows:
         return ""
