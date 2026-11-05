@@ -7,6 +7,7 @@ from io import BytesIO
 from pathlib import Path
 from typing import BinaryIO
 from display_tables import game_label
+from report_validation import SettlementError, norm as _norm, amount as _decimal, find_header, is_total, game_amounts
 
 DEFAULT_RATES = {"Slots": Decimal("0.0258"), "MiniGame": Decimal("0.0258"), "Casino1": Decimal("0.011"), "Casino2": Decimal("0.007"), "Sports": Decimal("0")}
 DEFAULT_SETTLEMENT_RATIO = Decimal("0.8")
@@ -14,26 +15,6 @@ GAMES = tuple(DEFAULT_RATES)
 ELECTRONIC_GAME = "電子類型"
 ELECTRONIC_SOURCES = ("Slots", "MiniGame", "Fishing")
 ELECTRONIC_RATES = {ELECTRONIC_GAME: DEFAULT_RATES["Slots"], **{k: v for k, v in DEFAULT_RATES.items() if k not in ELECTRONIC_SOURCES}}
-
-
-class SettlementError(Exception):
-    pass
-
-
-def _norm(value: object) -> str:
-    return "" if value is None else str(value).strip().lower().replace(" ", "")
-
-
-def _decimal(value: object, label: str) -> Decimal:
-    if value is None or str(value).strip() == "":
-        raise SettlementError(f"欄位「{label}」存在空白數值，請修正報表。")
-    try:
-        result = Decimal(str(value).replace(",", "").replace("%", ""))
-        if not result.is_finite():
-            raise InvalidOperation
-        return result
-    except (InvalidOperation, ValueError):
-        raise SettlementError(f"欄位「{label}」包含不合法數值：{value}")
 
 
 def _game(value: object) -> str | None:
@@ -60,50 +41,88 @@ def commission_games(games: dict, rates: dict) -> dict:
 
 
 def _find_sheet(wb, title: str):
-    for ws in wb.worksheets:
-        if _norm(ws.title) == _norm(title):
-            return ws
+    matches = [ws for ws in wb if _norm(ws.title) == _norm(title)]
+    if len(matches) > 1:
+        raise SettlementError(f'找不到唯一的「{title}」工作表。')
+    if matches:
+        return matches[0]
     raise SettlementError(f"找不到「{title}」工作表。")
+
+
+def _sheet_totals(ws, *, evidence=None):
+    header, columns = find_header(ws)
+    headers = next(ws.iter_rows(min_row=header, max_row=header))
+    accounts = [c.column for c in headers if _norm(c.value) in
+                {'代理帳號', '代理賬號', '代理帳戶', '會員帳號', '會員賬號', '會員帳戶', '帳號', 'agentaccount', 'memberaccount'}]
+    totals, grand_totals = {}, []
+    for row_number, row in enumerate(ws.iter_rows(min_row=header + 1), header + 1):
+        raw_game = row[columns['game'] - 1].value
+        raw_bet = row[columns['valid_bet'] - 1].value
+        raw_win = row[columns['win_loss'] - 1].value
+        account = row[accounts[0] - 1].value if len(accounts) == 1 else None
+        if is_total(raw_game, account):
+            if '總計' in (_norm(raw_game).rstrip(':：'), _norm(account).rstrip(':：')):
+                context = f'「{ws.title}」第 {row_number} 列總計'
+                bet, win = _decimal(raw_bet, context + '有效投注'), _decimal(raw_win, context + '輸贏金額')
+                if bet < 0:
+                    raise SettlementError(context + '有效投注不可為負數')
+                grand_totals.append({'valid_bet': bet, 'win_loss': win})
+            continue
+        if not _norm(raw_game) and all(v in (None, '') for v in (raw_bet, raw_win)):
+            continue
+        game, valid, win = game_amounts(raw_game, raw_bet, raw_win, sheet=ws.title, row=row_number, game_resolver=_game)
+        item = totals.setdefault(game, {'valid_bet': Decimal(0), 'win_loss': Decimal(0)})
+        item['valid_bet'] += valid
+        item['win_loss'] += win
+    if len(grand_totals) > 1:
+        raise SettlementError(f'「{ws.title}」有重複總計列，無法唯一核對')
+    if grand_totals:
+        actual = {key: sum((v[key] for v in totals.values()), Decimal(0)) for key in ('valid_bet', 'win_loss')}
+        _compare_totals(actual, grand_totals[0], f'「{ws.title}」明細與總計')
+    if evidence is not None and (totals or grand_totals):
+        evidence.append(True)
+    return totals
+
+
+def _compare_totals(actual, expected, context):
+    for key, label in [('valid_bet', '有效投注'), ('win_loss', '輸贏金額')]:
+        delta = actual[key] - expected[key]
+        if abs(delta) > Decimal('0.01'):
+            raise SettlementError(f'{context}核對不符：{label}明細 {actual[key]}、報表 {expected[key]}、差額 {delta}（容許 0.01）。請修正後重新上傳')
 
 
 def parse_report(source: str | Path | BinaryIO) -> dict:
     from openpyxl import load_workbook
-
     try:
         wb = load_workbook(source, data_only=True, read_only=True)
     except Exception as exc:
-        raise SettlementError(f"無法讀取 Excel 檔案：{exc}")
-    totals = {}
-    found_games = set()
-    source_sheets = []
-    for sheet_name in ("下線代理", "直屬會員"):
-        ws = _find_sheet(wb, sheet_name)
-        source_sheets.append(ws.title)
-        header_row = None
-        columns = {}
-        for row in ws.iter_rows():
-            found = {_norm(cell.value): cell.column for cell in row if cell.value is not None}
-            if "遊戲分類" in found and ("有效投注" in found or "有效投注額" in found) and "輸贏金額" in found:
-                header_row = row[0].row
-                columns = {"game": found["遊戲分類"], "valid_bet": found.get("有效投注", found.get("有效投注額")), "win_loss": found["輸贏金額"]}
-                break
-        if not header_row:
-            raise SettlementError(f"「{ws.title}」工作表缺少必要欄位：遊戲分類、有效投注、輸贏金額。")
-        for row in ws.iter_rows(min_row=header_row + 1):
-            game_raw = row[columns["game"] - 1].value
-            marker = _norm(game_raw)
-            if any(x in marker for x in ("小計", "合計", "總計")):
-                continue
-            game = _game(game_raw)
-            if game is None:
-                continue
-            valid = _decimal(row[columns["valid_bet"] - 1].value, "有效投注")
-            win_loss = _decimal(row[columns["win_loss"] - 1].value, "輸贏金額")
-            totals.setdefault(game, {"valid_bet": Decimal("0"), "win_loss": Decimal("0")})
-            totals[game]["valid_bet"] += valid
-            totals[game]["win_loss"] += win_loss
-            found_games.add(game)
-    return {"sheet_name": "、".join(source_sheets), "games": totals, "total_win_loss": sum((v["win_loss"] for v in totals.values()), Decimal("0")), "empty_report": not found_games}
+        raise SettlementError('無法讀取 Excel 檔案，請確認是有效且未加密的 .xlsx') from exc
+    try:
+        with localcontext() as context:
+            context.prec = 80
+            totals, source_sheets, evidence = {}, [], []
+            for sheet_name in ('下線代理', '直屬會員'):
+                ws = _find_sheet(wb, sheet_name)
+                source_sheets.append(ws.title)
+                for game, values in _sheet_totals(ws, evidence=evidence).items():
+                    item = totals.setdefault(game, {'valid_bet': Decimal(0), 'win_loss': Decimal(0)})
+                    for key in item:
+                        item[key] += values[key]
+            summaries = [ws for ws in wb if _norm(ws.title) == _norm('總結')]
+            if len(summaries) > 1:
+                raise SettlementError('找不到唯一的「總結」工作表')
+            if summaries:
+                summary = _sheet_totals(summaries[0], evidence=evidence)
+                for game in set(totals) | set(summary):
+                    zero = {'valid_bet': Decimal(0), 'win_loss': Decimal(0)}
+                    _compare_totals(totals.get(game, zero), summary.get(game, zero), f'「總結」{game_label(game)} 與來源分頁')
+            if not evidence:
+                raise SettlementError('報表沒有遊戲明細或明確的零金額資料，無法將空報表當作 0 結算。請提供完整報表')
+            return {'sheet_name': '、'.join(source_sheets), 'games': totals,
+                    'total_win_loss': sum((v['win_loss'] for v in totals.values()), Decimal(0)), 'empty_report': not totals,
+                    'summary_checked': bool(summaries)}
+    finally:
+        wb.close()
 
 
 def calculate_settlement(report: dict, rates: dict[str, Decimal], ratio: Decimal) -> dict:

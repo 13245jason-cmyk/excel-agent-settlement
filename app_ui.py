@@ -92,6 +92,8 @@ def render_member_commission(uploaded, rates, ratio_input, *, agent_mode=False, 
                           key=f"{cache_key}_account_{digest}_{search_id}")
         parsed_rates, ratio = read_parameters(rates, ratio_input)
         result = calculate(members, chosen, parsed_rates, ratio)
+        st.success(f"所選{label}資料檢查通過：遊戲分類、有效投注及輸贏金額均有效。")
+        st.caption("此模式只計算與驗證所選帳號，不以單一帳號金額比對整份報表總結。")
         st.subheader(f"{label} {result['account']} 的佣金明細")
         st.caption(f"來源：{sheet_name}。結算公式：（該帳號輸贏＋總佣金）×目前結算比例。")
         st.markdown(table_markdown([
@@ -124,13 +126,13 @@ def render_member_commission(uploaded, rates, ratio_input, *, agent_mode=False, 
                            file_name=f"{ENVIRONMENTS[environment] if download_scope is None else download_scope}_{safe_account}_{label}佣金.xlsx",
                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
     except (SettlementError, InvalidOperation, ValueError) as exc:
-        st.error(str(exc))
+        st.error(f"報表或參數檢查未通過：{exc}。未產生結算結果，請修正後重新計算。")
 
 
 def run_app(environment: str) -> None:
     st.set_page_config(page_title="Excel 代理結算系統", page_icon="🧾", layout="wide")
     st.title(f"🧾 Excel 代理結算系統｜{ENVIRONMENTS[environment]}")
-    st.caption("版本：electronic-games-v1")
+    st.caption("版本：report-checks-v1")
     if environment == "staging":
         st.warning("🧪 內部測試環境：請使用測試報表，結果不可作為正式付款依據。")
     account = require_login(environment)
@@ -190,12 +192,16 @@ def run_app(environment: str) -> None:
             if "Sports" in result["games"] and result["games"]["Sports"]["rate"] == 0:
                 st.warning("體育目前倍率為 0，佣金為 0；體育輸贏仍已計入結算。請確認左側倍率。")
         except (SettlementError, InvalidOperation, ValueError) as exc:
-            st.error(str(exc))
+            st.error(f"報表或參數檢查未通過：{exc}。未產生結算結果，請修正後重新計算。")
             st.stop()
 
+        if report.get('summary_checked'):
+            st.success("資料檢查與「總結」核對通過（各類型有效投注、輸贏金額，容許差額 0.01）。")
+        else:
+            st.warning("未提供「總結」工作表：來源明細檢查通過，但無法進行總結核對。")
         st.success(f"已辨識工作表：{report['sheet_name']}；資料期間/代理資訊依原始報表保留。")
         if report.get("empty_report"):
-            st.info("此報表的「總計」列為 0，且沒有遊戲明細；系統依原始總計顯示本期無交易資料。")
+            st.info("本期沒有遊戲明細，已核對報表提供的零金額資料，顯示本期無交易。")
         elif not report["games"]:
             st.info("報表沒有可計算的遊戲明細，系統依總計列顯示結果。")
         rows = []

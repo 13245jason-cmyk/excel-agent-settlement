@@ -26,7 +26,7 @@ def workbook(agent_rows=None, member_rows=None):
         [-10, 100, 'Slots', 'Agent_A'], [-5, 50, 'MiniGame', 'Agent_A'],
         [-2.5, 25, ' Fishing ', 'Agent_A'], [-20, 200, 'LiveCasino1', 'Agent_A'],
         [-30, 300, 'Sports', 'Agent_A'], [4, 40, 'FISHING', 'Agent_B'],
-        [99999, 99999, '總計', '合計'],
+        [99999, 99999, '小計', '合計'],
     ]:
         agent.append(row)
     member = wb.create_sheet('直屬會員')
@@ -37,9 +37,6 @@ def workbook(agent_rows=None, member_rows=None):
         [1, 10, 'MiniGame', 'Member_B'], [99999, 99999, '小計', '合計'],
     ]:
         member.append(row)
-    summary = wb.create_sheet('總結')
-    summary.append(['遊戲分類', '有效投注', '輸贏金額'])
-    summary.append(['Fishing', 99999, 99999])  # Never double-count another summary sheet.
     output = BytesIO()
     wb.save(output)
     wb.close()
@@ -175,7 +172,7 @@ def test_conflicting_legacy_rates_show_notice_without_silent_averaging(tmp_path)
 
 
 def test_empty_report_does_not_create_an_electronic_row():
-    result = calculate_settlement(parse_report(BytesIO(workbook([], []))), ELECTRONIC_RATES, Decimal('.8'))
+    result = calculate_settlement(parse_report(BytesIO(workbook([[0, 0, '總計', '合計']], []))), ELECTRONIC_RATES, Decimal('.8'))
     assert result['games'] == {} and result['final_settlement'] == 0
 
 
@@ -188,7 +185,7 @@ def test_grouped_rate_and_settings_work_end_to_end_on_testing_entry(monkeypatch,
     monkeypatch.setattr(app_ui, 'upload_report', lambda: uploaded)
     at = login(app(account, 'staging').run())
     assert not at.exception
-    assert any(c.value == '版本：electronic-games-v1' for c in at.caption)
+    assert any(c.value == '版本：report-checks-v1' for c in at.caption)
     assert at.text_input(key='rate_電子類型').value == '0.0258'
     assert at.text_input(key='rate_Casino1').label == '真人一館 倍率'
     assert at.text_input(key='rate_Casino2').label == '真人二館 倍率'

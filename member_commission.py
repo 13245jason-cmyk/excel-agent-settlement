@@ -7,26 +7,8 @@ from io import BytesIO
 
 from openpyxl import Workbook, load_workbook
 from display_tables import game_label
+from report_validation import amount, norm, find_header, is_total, game_amounts
 from settlement import SettlementError, _game, DEFAULT_SETTLEMENT_RATIO, commission_games
-
-
-def norm(value):
-    return re.sub(r"\s+", "", str(value or "")).casefold()
-
-
-def amount(value, label):
-    if isinstance(value, bool) or value is None:
-        raise SettlementError(f"{label}：缺少合法數值")
-    text = str(value).strip()
-    if not re.fullmatch(r"[+-]?(?:\d+|\d{1,3}(?:,\d{3})+)(?:\.\d+)?", text):
-        raise SettlementError(f"{label}：數值格式錯誤")
-    try:
-        result = Decimal(text.replace(",", ""))
-    except InvalidOperation as exc:
-        raise SettlementError(f"{label}：數值格式錯誤") from exc
-    if not result.is_finite() or len(result.as_tuple().digits) > 25 or abs(result) > Decimal('1e15'):
-        raise SettlementError(f"{label}：數值超出範圍")
-    return result
 
 
 def parse_member_accounts(source, *, sheet_name="直屬會員", account_label="會員"):
@@ -39,24 +21,7 @@ def parse_member_accounts(source, *, sheet_name="直屬會員", account_label="�
         if len(sheets) != 1:
             raise SettlementError(f"找不到唯一的「{sheet_name}」工作表")
         ws = sheets[0]
-        if ws.max_row > 100000 or ws.max_column > 500:
-            raise SettlementError(f"{sheet_name}報表過大")
-        aliases = {
-            "account": ({"代理帳號", "代理賬號", "代理帳戶", "帳號", "agentaccount"} if account_label == "代理" else {"會員帳號", "會員賬號", "會員帳戶", "帳號", "memberaccount"}),
-            "game": {"遊戲分類", "遊戲類型"},
-            "valid_bet": {"有效投注", "有效投注額"},
-            "win_loss": {"輸贏金額"},
-        }
-        headers = []
-        for row in ws.iter_rows():
-            found = {key: [c.column for c in row if norm(c.value) in names] for key, names in aliases.items()}
-            if all(found.values()):
-                if any(len(hits) != 1 for hits in found.values()):
-                    raise SettlementError(f"{sheet_name}標題有重複欄位")
-                headers.append((row[0].row, {k: v[0] for k,v in found.items()}))
-        if len(headers) != 1:
-            raise SettlementError(f"{sheet_name}需要唯一標題列：{account_label}帳號、遊戲分類、有效投注、輸贏金額")
-        header, columns = headers[0]
+        header, columns = find_header(ws, account_label=account_label)
         merged_accounts = {}
         for merged in ws.merged_cells.ranges:
             if merged.min_col == merged.max_col == columns['account']:
@@ -71,7 +36,9 @@ def parse_member_accounts(source, *, sheet_name="直屬會員", account_label="�
                 raw_account = merged_accounts.get(ri)
             account = str(raw_account or '').strip()
             game = row[columns['game']-1].value
-            if not norm(game) or any(m in norm(game) or m in norm(account) for m in ('小計','合計','總計')):
+            if is_total(game, account):
+                continue
+            if not norm(game) and all(row[columns[k]-1].value in (None, '') for k in ('valid_bet', 'win_loss')):
                 continue
             if not account:
                 raise SettlementError(f"{sheet_name}第 {ri} 列缺少{account_label}帳號，無法歸屬遊戲資料")
@@ -97,13 +64,8 @@ def calculate_member_commission(members, account, rates, ratio=DEFAULT_SETTLEMEN
         context.prec = 80
         games = {}
         for row in member['rows']:
-            game = _game(norm(row['game']))
-            if game is None:
-                raise SettlementError(f"所選{account_label}第 {row['row']} 列有不支援的遊戲分類，無法完整計算佣金")
-            bet = amount(row['valid_bet'], f"第 {row['row']} 列有效投注")
-            win = amount(row['win_loss'], f"第 {row['row']} 列輸贏金額")
-            if bet < 0:
-                raise SettlementError("有效投注不可為負數")
+            game, bet, win = game_amounts(row['game'], row['valid_bet'], row['win_loss'],
+                                          sheet=member.get('source_sheet', '直屬會員'), row=row['row'], game_resolver=_game)
             item = games.setdefault(game, {'valid_bet': Decimal(0), 'win_loss': Decimal(0)})
             item['valid_bet'] += bet
             item['win_loss'] += win

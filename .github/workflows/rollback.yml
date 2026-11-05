@@ -1,0 +1,54 @@
+name: 快速回復版本
+on:
+  workflow_dispatch:
+    inputs:
+      site:
+        description: 要操作的站台
+        type: choice
+        options: [staging, production1, production2, limited]
+        required: true
+      version:
+        description: 版本名稱或此站的 rollback-backup 標籤（先看 RELEASES.md）
+        type: string
+        required: true
+      action:
+        description: 預設只預覽；執行會發布所選站台的回復
+        type: choice
+        options: [preview, apply]
+        required: true
+      confirm_site:
+        description: 執行時再次輸入站台英文名稱；預覽可留空
+        type: string
+        required: false
+permissions:
+  contents: read
+concurrency:
+  group: rollback-${{ inputs.site }}
+  cancel-in-progress: false
+jobs:
+  recover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r requirements.txt
+      - name: 預覽及選擇性回復
+        env:
+          RECOVERY_SITE: ${{ inputs.site }}
+          RECOVERY_VERSION: ${{ inputs.version }}
+          RECOVERY_ACTION: ${{ inputs.action }}
+          RECOVERY_CONFIRM: ${{ inputs.confirm_site }}
+        run: |
+          python tools/rollback.py preview --site "$RECOVERY_SITE" --version "$RECOVERY_VERSION" > rollback-plan.json
+          cat rollback-plan.json >> "$GITHUB_STEP_SUMMARY"
+          if [ "$RECOVERY_ACTION" = "apply" ]; then
+            RECOVERY_HEAD=$(python -c 'import json; print(json.load(open("rollback-plan.json"))["head"])')
+            python tools/rollback.py apply --site "$RECOVERY_SITE" --version "$RECOVERY_VERSION" --confirm-site "$RECOVERY_CONFIRM" --expected-head "$RECOVERY_HEAD"
+          fi
